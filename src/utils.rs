@@ -9,10 +9,10 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::io::Write;
 
-static IMAGES_DIR: OnceLock<PathBuf> = OnceLock::new();
+static HCRIU_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-pub fn set_images_dir(images_dir: PathBuf) {
-    let path = images_dir.as_path();
+pub fn set_hcriu_dir(hcriu_dir: PathBuf) {
+    let path = hcriu_dir.as_path();
     let expanded_path = if path.starts_with("~") {
         if let Ok(sudo_user) = env::var("SUDO_USER") {
             #[cfg(unix)]
@@ -24,11 +24,11 @@ pub fn set_images_dir(images_dir: PathBuf) {
     } else {
         path.to_path_buf()
     };
-    IMAGES_DIR.set(PathBuf::from(expanded_path)).unwrap();
+    HCRIU_DIR.set(PathBuf::from(expanded_path)).unwrap();
 }
 
-pub fn get_images_dir() -> PathBuf {
-    IMAGES_DIR.get().unwrap().clone()
+pub fn get_hcriu_dir() -> PathBuf {
+    HCRIU_DIR.get().unwrap().clone()
 }       
 
 #[derive(Debug, Serialize, Deserialize)]

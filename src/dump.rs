@@ -4,7 +4,7 @@ use std::os::unix::io::AsRawFd;
 
 pub fn handle_create(criu: &mut Criu, pid: i32, leave_running: bool) {
     let meta = utils::CheckpointMeta::new(pid);
-    let checkpoint_dir = utils::get_images_dir().join(meta.checkpoint_id.clone());
+    let checkpoint_dir = utils::get_hcriu_dir().join(meta.checkpoint_id.clone());
     if !checkpoint_dir.exists() {
         std::fs::create_dir_all(&checkpoint_dir).unwrap();
     } else {

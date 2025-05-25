@@ -26,9 +26,9 @@ struct Cli {
     #[arg(long)]
     criu_path: Option<String>,
 
-    /// Specify images directory, where store all checkpoints
+    /// Specify checkpoints directory, where store all checkpoints
     #[arg(short = 'D', long, default_value = "~/.hcriu/")]
-    images_dir: String,
+    hcriu_dir: String,
 
     #[command(subcommand)]
     command: Commands,
@@ -86,10 +86,10 @@ fn main() {
     let version = criu.get_criu_version().unwrap();
     println!("CRIU version: {}", version);
 
-    utils::set_images_dir(cli.images_dir.into());
-    let images_dir = utils::get_images_dir();
-    if !images_dir.exists() {
-        std::fs::create_dir_all(images_dir).unwrap();
+    utils::set_hcriu_dir(cli.hcriu_dir.into());
+    let hcriu_dir = utils::get_hcriu_dir();
+    if !hcriu_dir.exists() {
+        std::fs::create_dir_all(hcriu_dir).unwrap();
     }
 
     match cli.command {

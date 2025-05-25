@@ -31,9 +31,9 @@ fn find_by_prefix(prefix: &str) -> PathBuf {
         std::process::exit(1);
     }
 
-    let images_dir = utils::get_images_dir();
+    let hcriu_dir = utils::get_hcriu_dir();
     let mut checkpoints = Vec::new();
-    for entry in std::fs::read_dir(images_dir).unwrap() {
+    for entry in std::fs::read_dir(hcriu_dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
         if path.is_dir()
