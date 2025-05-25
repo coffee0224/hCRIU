@@ -5,6 +5,7 @@ use which::which;
 mod dump;
 mod restore;
 mod utils;
+mod list;
 
 #[derive(Debug, ValueEnum, Clone)]
 enum LogLevel {
@@ -12,6 +13,12 @@ enum LogLevel {
     Info,
     Warn,
     Error,
+}
+
+#[derive(Debug, ValueEnum, Clone)]
+enum Sort {
+    Time,
+    Pid,
 }
 
 #[derive(Debug, Parser)]
@@ -60,6 +67,8 @@ enum Commands {
     },
 
     List {
+        #[arg(long, default_value = "time")]
+        sort: Sort,
     },
 }
 
@@ -98,6 +107,9 @@ fn main() {
         }
         Commands::Restore { checkpoint_id } => {
             restore::handle_restore(&mut criu, checkpoint_id);
+        }
+        Commands::List { sort } => {
+            list::handle_list(sort);
         }
         _ => {}
     }

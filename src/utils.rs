@@ -83,3 +83,13 @@ fn get_process_cmd(pid: i32) -> String {
     let process = Process::new(pid).unwrap();
     process.cmdline().unwrap().join(" ")
 }
+
+pub fn get_all_checkpoints() -> Vec<CheckpointMeta> {
+    let hcriu_dir = get_hcriu_dir();
+    std::fs::read_dir(hcriu_dir).unwrap().map(|c| {
+        let checkpoint = c.unwrap();
+        let meta_file = checkpoint.path().join("meta.toml");
+        let meta = CheckpointMeta::parse(std::fs::read_to_string(meta_file).unwrap());
+        meta
+    }).collect()
+}
