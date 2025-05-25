@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use procfs::process::Process;
 use chrono;
+use comfy_table::Table;
 use dirs::home_dir;
 use std::env;
 use std::sync::OnceLock;
@@ -31,23 +32,30 @@ pub fn get_hcriu_dir() -> PathBuf {
     HCRIU_DIR.get().unwrap().clone()
 }       
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointMeta {
     pub checkpoint_id: String,
     pub pid: i32,
     pub cmd: String,
+    pub tag: String,
     pub dump_time: String,
 }
 
 impl CheckpointMeta {
-    pub fn new(pid: i32) -> Self {
+    pub fn new(pid: i32, tag: &Option<String>) -> Self {
         let cmd = get_process_cmd(pid);
         let dump_time = chrono::Utc::now().to_string();
+        let tag = if let Some(tag) = tag {
+            tag.clone()
+        } else {
+            format!("tmp-{}", pid)
+        };
 
         let mut meta = CheckpointMeta {
             checkpoint_id: String::new(),
             pid,
             cmd,
+            tag,
             dump_time,
         };
         
@@ -92,4 +100,18 @@ pub fn get_all_checkpoints() -> Vec<CheckpointMeta> {
         let meta = CheckpointMeta::parse(std::fs::read_to_string(meta_file).unwrap());
         meta
     }).collect()
+}
+
+pub fn print_checkpoints_table(checkpoints: &Vec<&CheckpointMeta>) { 
+    let mut table = Table::new();
+    table.set_header(vec!["Checkpoint ID", "PID", "Command", "Dump Time"]);
+    for checkpoint in checkpoints {
+        table.add_row(vec![
+            checkpoint.checkpoint_id[..7].to_string(),
+            checkpoint.pid.to_string(),
+            checkpoint.cmd.clone(),
+            checkpoint.dump_time.clone(),
+        ]);
+    }
+    println!("{}", table);
 }

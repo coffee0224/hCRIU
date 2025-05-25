@@ -4,21 +4,21 @@ use std::os::unix::io::AsRawFd;
 use humantime::Duration;
 use std::thread;
 
-pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, leave_running: bool) {
+pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, tag: Option<String>, leave_running: bool) {
     if let Some(interval) = interval {
         let interval_ms = interval.as_millis() as u64;
         loop {
-            dump_once(criu, pid, true);
+            dump_once(criu, pid, &tag, leave_running);
             thread::sleep(std::time::Duration::from_millis(interval_ms));
         }
     } else {
-        dump_once(criu, pid, leave_running);
+        dump_once(criu, pid, &tag, leave_running);
     }
 }
 
 
-fn dump_once(criu: &mut Criu, pid: i32, leave_running: bool) {
-    let meta = utils::CheckpointMeta::new(pid);
+fn dump_once(criu: &mut Criu, pid: i32, tag: &Option<String>, leave_running: bool) {
+    let meta = utils::CheckpointMeta::new(pid, tag);
     let checkpoint_dir = utils::get_hcriu_dir().join(meta.checkpoint_id.clone());
     if !checkpoint_dir.exists() {
         std::fs::create_dir_all(&checkpoint_dir).unwrap();

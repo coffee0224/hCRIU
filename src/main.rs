@@ -7,6 +7,7 @@ mod dump;
 mod restore;
 mod utils;
 mod list;
+mod merge;
 
 #[derive(Debug, ValueEnum, Clone)]
 enum Sort {
@@ -41,6 +42,10 @@ enum Commands {
         #[arg(short, long)]
         interval: Option<Duration>,
 
+        /// Create checkpoint with a tag
+        #[arg(short, long)]
+        tag: Option<String>,
+
         /// leave running processes before creation
         #[arg(long, default_value = "false")]
         leave_running: bool,
@@ -56,6 +61,28 @@ enum Commands {
         /// Sort checkpoints by time or pid
         #[arg(long, default_value = "time")]
         sort: Sort,
+    },
+
+    /// Merge checkpoints, by default, it will keep the latest checkpoint
+    Merge {
+        /// tag filter for checkpoints to merge
+        tag: String,
+
+        /// do not merge, just print the result
+        #[arg(short, long, default_value = "false")]
+        dry_run: bool,
+
+        /// pid filter for the process to merge
+        #[arg(short, long)]
+        pid: Option<i32>,
+
+        /// keep daily checkpoints
+        #[arg(long, default_value = "false")]
+        keep_daily: bool,
+
+        /// keep hourly checkpoints
+        #[arg(long, default_value = "false")]
+        keep_hourly: bool,
     },
 }
 
@@ -89,8 +116,8 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Dump { pid, interval, leave_running } => {
-            dump::handle_dump(&mut criu, pid, interval, leave_running);
+        Commands::Dump { pid, interval, tag, leave_running } => {
+            dump::handle_dump(&mut criu, pid, interval, tag, leave_running);
         }
         Commands::Restore { checkpoint_id } => {
             restore::handle_restore(&mut criu, checkpoint_id);
@@ -98,6 +125,8 @@ fn main() {
         Commands::List { sort } => {
             list::handle_list(sort);
         }
-        _ => {}
+        Commands::Merge { tag, dry_run, pid, keep_daily, keep_hourly } => {
+            merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly);
+        }
     }
 }
