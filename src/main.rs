@@ -1,13 +1,10 @@
-use std::os::fd::AsRawFd;
-
 use clap::{Parser, Subcommand, ValueEnum};
-use humantime::Duration;
-use bytesize::ByteSize;
 use rust_criu::Criu;
 use which::which;
 
 mod dump;
 mod restore;
+mod utils;
 
 #[derive(Debug, ValueEnum, Clone)]
 enum LogLevel {
@@ -25,20 +22,13 @@ struct Cli {
     // #[arg(short, long, default_value = "~/.checkpointctl.yaml")]
     // config: String,
 
-    /// Log level
-    #[arg(long, default_value = "info")]
-    log_level: LogLevel,
-
-    #[arg(short = 'o', long)]
-    log_file: Option<String>,
-
     /// Specify CRIU executable path
     #[arg(long)]
     criu_path: Option<String>,
 
-    /// Specify image directory, used for dump and restore
-    #[arg(short = 'D', long, default_value = "./")]
-    image_dir: String,
+    /// Specify images directory, where store all checkpoints
+    #[arg(short = 'D', long, default_value = "~/.hcriu/")]
+    images_dir: String,
 
     #[command(subcommand)]
     command: Commands,
@@ -66,9 +56,11 @@ enum Commands {
 
     /// Restore container from checkpoint
     Restore {
+        checkpoint_id: String,
     },
 
-
+    List {
+    },
 }
 
 fn find_criu_path() -> Option<String> {
@@ -94,32 +86,18 @@ fn main() {
     let version = criu.get_criu_version().unwrap();
     println!("CRIU version: {}", version);
 
-    criu.set_log_level(match cli.log_level {
-        LogLevel::Error => 0,
-        LogLevel::Warn => 1,
-        LogLevel::Info => 2,
-        LogLevel::Debug => 3,
-    });
-    // if let Some(log_file) = cli.log_file {
-    //     criu.set_log_file(log_file);
-    // } else {
-    //     let log_file = match cli.command {
-    //         Commands::Dump { .. } => std::env::temp_dir().join("dump.log"),
-    //         Commands::Restore { .. } => std::env::temp_dir().join("restore.log"),
-    //         _ => unreachable!(),
-    //     };
-    //     criu.set_log_file(log_file.to_string_lossy().into_owned());
-    // }
-
-    let image_dir_fd = std::fs::File::open(&cli.image_dir).unwrap();
-    criu.set_images_dir_fd(image_dir_fd.as_raw_fd());
+    utils::set_images_dir(cli.images_dir.into());
+    let images_dir = utils::get_images_dir();
+    if !images_dir.exists() {
+        std::fs::create_dir_all(images_dir).unwrap();
+    }
 
     match cli.command {
         Commands::Dump { pid, leave_running } => {
             dump::handle_create(&mut criu, pid, leave_running);
         }
-        Commands::Restore { } => {
-            restore::handle_restore(&mut criu);
+        Commands::Restore { checkpoint_id } => {
+            restore::handle_restore(&mut criu, checkpoint_id);
         }
         _ => {}
     }

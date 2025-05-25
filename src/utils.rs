@@ -1,8 +1,35 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
+use procfs::process::Process;
+use chrono;
+use dirs::home_dir;
+use std::env;
+use std::sync::OnceLock;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::io::Write;
+
+static IMAGES_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn set_images_dir(images_dir: PathBuf) {
+    let path = images_dir.as_path();
+    let expanded_path = if path.starts_with("~") {
+        if let Ok(sudo_user) = env::var("SUDO_USER") {
+            #[cfg(unix)]
+            let home = PathBuf::from(format!("/home/{}", sudo_user));
+            home.join(path.strip_prefix("~").unwrap())
+        } else {
+            home_dir().unwrap().join(path.strip_prefix("~").unwrap())
+        }
+    } else {
+        path.to_path_buf()
+    };
+    IMAGES_DIR.set(PathBuf::from(expanded_path)).unwrap();
+}
+
+pub fn get_images_dir() -> PathBuf {
+    IMAGES_DIR.get().unwrap().clone()
+}       
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CheckpointMeta {
@@ -13,7 +40,10 @@ pub struct CheckpointMeta {
 }
 
 impl CheckpointMeta {
-    pub fn new(pid: i32, cmd: String, dump_time: String) -> Self {
+    pub fn new(pid: i32) -> Self {
+        let cmd = get_process_cmd(pid);
+        let dump_time = chrono::Utc::now().to_string();
+
         let mut meta = CheckpointMeta {
             checkpoint_id: String::new(),
             pid,
@@ -47,4 +77,9 @@ impl CheckpointMeta {
         let meta: CheckpointMeta = toml::from_str(&meta).unwrap();
         meta
     }
+}
+
+fn get_process_cmd(pid: i32) -> String {
+    let process = Process::new(pid).unwrap();
+    process.cmdline().unwrap().join(" ")
 }

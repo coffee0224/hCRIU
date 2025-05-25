@@ -1,6 +1,6 @@
 use rust_criu::Criu;
 
-pub fn handle_restore(criu: &mut Criu) {
+pub fn handle_restore(criu: &mut Criu, checkpoint_id: String) {
     criu.set_shell_job(true);
     criu.restore().map_err(|e| {
         eprintln!("Failed to restore: {}", e);
