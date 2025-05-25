@@ -9,14 +9,6 @@ mod utils;
 mod list;
 
 #[derive(Debug, ValueEnum, Clone)]
-enum LogLevel {
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-#[derive(Debug, ValueEnum, Clone)]
 enum Sort {
     Time,
     Pid,
@@ -26,10 +18,6 @@ enum Sort {
 #[command(name = "hCRIU")]
 #[command(about = "checkpoint management tool")]
 struct Cli {
-    /// Specify configuration file path
-    // #[arg(short, long, default_value = "~/.checkpointctl.yaml")]
-    // config: String,
-
     /// Specify CRIU executable path
     #[arg(long)]
     criu_path: Option<String>,
@@ -49,13 +37,9 @@ enum Commands {
         /// checkpoint process tree identifier by  PID
         pid: i32,
 
-        /// Create interval (e.g., 30m, 1h)
+        /// Create interval (e.g., 10s, 30m, 1h)
         #[arg(short, long)]
         interval: Option<Duration>,
-
-        /// Add metadata label (can be used multiple times)
-        // #[arg(short, long)]
-        // label: Vec<String>,
 
         /// leave running processes before creation
         #[arg(long, default_value = "false")]
@@ -67,7 +51,9 @@ enum Commands {
         checkpoint_id: String,
     },
 
+    /// List all checkpoints
     List {
+        /// Sort checkpoints by time or pid
         #[arg(long, default_value = "time")]
         sort: Sort,
     },

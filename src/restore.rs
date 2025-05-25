@@ -5,10 +5,11 @@ use std::path::PathBuf;
 
 pub fn handle_restore(criu: &mut Criu, checkpoint_id: String) {
     let checkpoint_dir = find_by_prefix(&checkpoint_id);
+    let checkpoint_fd = std::fs::File::open(&checkpoint_dir).unwrap();
+    criu.set_work_dir_fd(checkpoint_fd.as_raw_fd());
     let image_dir = checkpoint_dir.join("image");
     let image_fd = std::fs::File::open(&image_dir).unwrap();
     criu.set_images_dir_fd(image_fd.as_raw_fd());
-    criu.set_work_dir_fd(image_fd.as_raw_fd());
     criu.set_log_level(4);
     criu.set_log_file("restore.log".to_string());
     criu.set_shell_job(true);

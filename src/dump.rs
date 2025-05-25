@@ -26,6 +26,8 @@ fn dump_once(criu: &mut Criu, pid: i32, leave_running: bool) {
         eprintln!("Checkpoint {} already exists", meta.checkpoint_id);
         std::process::exit(1);
     }
+    let checkpoint_fd = std::fs::File::open(&checkpoint_dir).unwrap();
+    criu.set_work_dir_fd(checkpoint_fd.as_raw_fd());
 
     let meta_file = checkpoint_dir.join("meta.toml");
     meta.save(&meta_file).unwrap();
@@ -34,7 +36,6 @@ fn dump_once(criu: &mut Criu, pid: i32, leave_running: bool) {
     std::fs::create_dir_all(&image_dir).unwrap();
     let image_fd = std::fs::File::open(&image_dir).unwrap();
     criu.set_images_dir_fd(image_fd.as_raw_fd());
-    criu.set_work_dir_fd(image_fd.as_raw_fd());
 
     criu.set_log_level(4);
     criu.set_log_file("dump.log".to_string());
