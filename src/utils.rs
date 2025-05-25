@@ -104,10 +104,11 @@ pub fn get_all_checkpoints() -> Vec<CheckpointMeta> {
 
 pub fn print_checkpoints_table(checkpoints: &Vec<&CheckpointMeta>) { 
     let mut table = Table::new();
-    table.set_header(vec!["Checkpoint ID", "PID", "Command", "Dump Time"]);
+    table.set_header(vec!["Checkpoint ID", "Tag", "PID", "Command", "Dump Time"]);
     for checkpoint in checkpoints {
         table.add_row(vec![
             checkpoint.checkpoint_id[..7].to_string(),
+            checkpoint.tag.clone(),
             checkpoint.pid.to_string(),
             checkpoint.cmd.clone(),
             checkpoint.dump_time.clone(),
