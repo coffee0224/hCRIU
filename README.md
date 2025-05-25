@@ -3,6 +3,7 @@
 hCRIU is a tool to creat and restore checkpoint of process based on [CRIU](https://github.com/checkpoint-restore/criu). It support checkpoint manager, including periodically creat, merge and restore.
 
 ## How to use
+Firstly, you need to install [criu](https://criu.org/Packages).
 
 ### Create a checkpoint
 ```shell
@@ -53,7 +54,7 @@ hcriu merge <tag> --dry-run
 ```
 
 ### Additional Options
-- `--criu-path`: Specify custom CRIU executable path
+- `--criu-path`: Specify custom CRIU executable path (default find by which)
 - `-D, --hcriu-dir`: Specify checkpoints directory (default: ~/.hcriu/)
 
 ## Useful Link
