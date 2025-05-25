@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use rust_criu::Criu;
 use which::which;
+use humantime::Duration;
 
 mod dump;
 mod restore;
@@ -49,8 +50,8 @@ enum Commands {
         pid: i32,
 
         /// Create interval (e.g., 30m, 1h)
-        // #[arg(short, long)]
-        // interval: Option<Duration>,
+        #[arg(short, long)]
+        interval: Option<Duration>,
 
         /// Add metadata label (can be used multiple times)
         // #[arg(short, long)]
@@ -102,8 +103,8 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Dump { pid, leave_running } => {
-            dump::handle_create(&mut criu, pid, leave_running);
+        Commands::Dump { pid, interval, leave_running } => {
+            dump::handle_dump(&mut criu, pid, interval, leave_running);
         }
         Commands::Restore { checkpoint_id } => {
             restore::handle_restore(&mut criu, checkpoint_id);

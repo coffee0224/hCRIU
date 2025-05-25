@@ -1,8 +1,23 @@
 use rust_criu::Criu;
 use crate::utils;
 use std::os::unix::io::AsRawFd;
+use humantime::Duration;
+use std::thread;
 
-pub fn handle_create(criu: &mut Criu, pid: i32, leave_running: bool) {
+pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, leave_running: bool) {
+    if let Some(interval) = interval {
+        let interval_ms = interval.as_millis() as u64;
+        loop {
+            dump_once(criu, pid, true);
+            thread::sleep(std::time::Duration::from_millis(interval_ms));
+        }
+    } else {
+        dump_once(criu, pid, leave_running);
+    }
+}
+
+
+fn dump_once(criu: &mut Criu, pid: i32, leave_running: bool) {
     let meta = utils::CheckpointMeta::new(pid);
     let checkpoint_dir = utils::get_hcriu_dir().join(meta.checkpoint_id.clone());
     if !checkpoint_dir.exists() {
