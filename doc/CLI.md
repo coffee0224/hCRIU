@@ -8,8 +8,7 @@
 | ------------------ | -------- | ------ | ---------------------------- |
 | `-i, --interval` | duration | -      | 定时创建间隔（如 30m, 1h）   |
 | `-l, --label`    | string   | -      | 添加元数据标签（可多次使用） |
-| `-p, --parent`   | string   | -      | 父检查点ID（增量模式）       |
-| `--compression`  | enum     | zstd   | 压缩算法（none/gzip/zstd）   |
+| `-p, --parent`   | string   | -      | 父检查点ID（增量模式         |
 | `--pre-freeze`   | -        | -      | 创建前冻结容器进程           |
 | `--memory-limit` | size     | 1G     | 内存快照上限（如 512MB）     |
 
@@ -30,10 +29,6 @@ checkpointctl create -i 1h --label=prod --parent=cp-123 mycontainer
 | 选项                  | 类型   | 描述                                             |
 | --------------------- | ------ | ------------------------------------------------ |
 | `-t, --target-node` | string | 指定恢复的目标节点                               |
-| `--parallel`        | int    | 并行恢复线程数（默认3）                          |
-| `--validate`        | -      | 恢复前验证数据完整性                             |
-| `--resume`          | -      | 自动恢复进程执行状态                             |
-| `--network-remap`   | CIDR   | 重映射容器网络（如 10.0.0.0/24→192.168.0.0/24） |
 
 **示例**：
 
@@ -54,7 +49,6 @@ checkpointctl restore --parallel=5 --network-remap=10.0.0.0/24:192.168.1.0/24 cp
 | `-o, --output` | 输出格式（text/json/yaml）               |
 | `--sort`       | 排序字段（time/size/labels）             |
 | `-f, --filter` | 过滤表达式（如 "label=prod && age<24h"） |
-| `--show-tree`  | 显示检查点依赖树                         |
 
 **示例**：
 
@@ -73,38 +67,17 @@ checkpointctl list -o json --filter="size>100MB || label=critical"
 | 选项                | 描述                                                                                                       |
 | ------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `-s, --strategy`  | 合并策略：`<br>` - time-based（时间窗口）`<br>` - incremental（增量合并）`<br>` - tagged（标签保留） |
+| `--keep-latest`    | 保留最近N个检查点        |
 | `--keep-daily`    | 保留最近N天的每日检查点                                                                                    |
 | `--keep-hourly`   | 保留最近N小时的检查点                                                                                      |
+| `--exclude-labels` | 排除指定标签             |
 | `--retain-labels` | 保留指定标签的检查点                                                                                       |
-| `--aggressive`    | 启用深度去重模式                                                                                           |
 | `--dry-run`       | 模拟合并不实际执行                                                                                         |
 
 **示例**：
 
 ```bash
 checkpointctl merge -s time-based --keep-daily=7 --aggressive mycontainer
-```
-
----
-
-#### **5. prune 子命令**
-
-**功能**：清理旧检查点
-**语法**：
-`checkpointctl prune [OPTIONS] <CONTAINER_ID>`
-
-| 选项                 | 描述                     |
-| -------------------- | ------------------------ |
-| `--keep-latest`    | 保留最近N个检查点        |
-| `--keep-days`      | 保留N天内的检查点        |
-| `--exclude-labels` | 排除指定标签             |
-| `--max-storage`    | 存储空间上限（如 100GB） |
-| `--prune-dangling` | 清理无父节点的孤立检查点 |
-
-**示例**：
-
-```bash
-checkpointctl prune --keep-latest=5 --max-storage=50GB myapp
 ```
 
 ---
@@ -119,8 +92,6 @@ checkpointctl prune --keep-latest=5 --max-storage=50GB myapp
 | -------------- | ---------------------- |
 | `--metadata` | 显示完整元数据         |
 | `--diff`     | 与另一检查点的差异比较 |
-| `--verify`   | 验证数据完整性         |
-| `--export`   | 导出为可移植格式       |
 
 **示例**：
 
@@ -156,11 +127,9 @@ checkpointctl automanage --cpu-threshold=70% --mem-threshold=85% --daemonize
 
 | 选项                  | 描述                                          |
 | --------------------- | --------------------------------------------- |
+| `-D, --image_dir`      |  进程镜像存储目录 |
 | `-c, --config`      | 指定配置文件路径（默认~/.checkpointctl.yaml） |
 | `--log-level`       | 日志级别（debug/info/warn/error）             |
-| `--storage-backend` | 存储后端（local/s3/nfs）                      |
-| `--criu-path`       | 指定CRIU可执行文件路径                        |
-
 ---
 
 ### **配置文件示例**
