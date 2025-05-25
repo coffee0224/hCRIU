@@ -8,7 +8,7 @@ pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, tag: O
     if let Some(interval) = interval {
         let interval_ms = interval.as_millis() as u64;
         loop {
-            dump_once(criu, pid, &tag, leave_running);
+            dump_once(criu, pid, &tag, true);
             thread::sleep(std::time::Duration::from_millis(interval_ms));
         }
     } else {
