@@ -1,5 +1,5 @@
-use crate::utils;
 use crate::Sort;
+use crate::utils;
 
 pub fn handle_list(sort: Sort) {
     let mut checkpoints = utils::get_all_checkpoints();

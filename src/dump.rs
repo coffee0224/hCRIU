@@ -1,10 +1,16 @@
-use rust_criu::Criu;
 use crate::utils;
-use std::os::unix::io::AsRawFd;
 use humantime::Duration;
+use rust_criu::Criu;
+use std::os::unix::io::AsRawFd;
 use std::thread;
 
-pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, tag: Option<String>, leave_running: bool) {
+pub fn handle_dump(
+    criu: &mut Criu,
+    pid: i32,
+    interval: Option<Duration>,
+    tag: Option<String>,
+    leave_running: bool,
+) {
     if let Some(interval) = interval {
         let interval_ms = interval.as_millis() as u64;
         loop {
@@ -15,7 +21,6 @@ pub fn handle_dump(criu: &mut Criu, pid: i32, interval: Option<Duration>, tag: O
         dump_once(criu, pid, &tag, leave_running);
     }
 }
-
 
 fn dump_once(criu: &mut Criu, pid: i32, tag: &Option<String>, leave_running: bool) {
     let meta = utils::CheckpointMeta::new(pid, tag);
@@ -44,11 +49,14 @@ fn dump_once(criu: &mut Criu, pid: i32, tag: &Option<String>, leave_running: boo
     criu.set_leave_running(leave_running);
     criu.set_shell_job(true);
 
-    criu.dump().map_err(|e| {
-        eprintln!("Failed to dump: {}", e);
-        std::process::exit(1);
-    }).and_then(|_| {
-        println!("Dump success to {}", checkpoint_dir.display());
-        Ok(())
-    }).unwrap();
+    criu.dump()
+        .map_err(|e| {
+            eprintln!("Failed to dump: {}", e);
+            std::process::exit(1);
+        })
+        .and_then(|_| {
+            println!("Dump success to {}", checkpoint_dir.display());
+            Ok(())
+        })
+        .unwrap();
 }

@@ -1,13 +1,24 @@
 use crate::utils;
 
-
-pub fn handle_merge(tag: String, dry_run: bool, pid: Option<i32>, keep_daily: bool, keep_hourly: bool) {
+pub fn handle_merge(
+    tag: String,
+    dry_run: bool,
+    pid: Option<i32>,
+    keep_daily: bool,
+    keep_hourly: bool,
+) {
     let all_checkpoints = utils::get_all_checkpoints();
-    let filtered_checkpoints = all_checkpoints.iter().filter(|c| c.tag == tag).collect::<Vec<_>>();
-
+    let filtered_checkpoints = all_checkpoints
+        .iter()
+        .filter(|c| c.tag == tag)
+        .collect::<Vec<_>>();
 
     let mut filtered_checkpoints = if let Some(pid) = pid {
-        filtered_checkpoints.iter().filter(|c| c.pid == pid).map(|c| *c).collect::<Vec<_>>()
+        filtered_checkpoints
+            .iter()
+            .filter(|c| c.pid == pid)
+            .map(|c| *c)
+            .collect::<Vec<_>>()
     } else {
         filtered_checkpoints
     };
@@ -31,8 +42,15 @@ pub fn handle_merge(tag: String, dry_run: bool, pid: Option<i32>, keep_daily: bo
         // keep the latest checkpoint of each hour
         let mut hourly_checkpoints = Vec::new();
         let mut current_hour = String::new();
-        for checkpoint in filtered_checkpoints.iter().rev() {        
-            let hour = checkpoint.dump_time.split(' ').nth(1).unwrap().split(':').next().unwrap();
+        for checkpoint in filtered_checkpoints.iter().rev() {
+            let hour = checkpoint
+                .dump_time
+                .split(' ')
+                .nth(1)
+                .unwrap()
+                .split(':')
+                .next()
+                .unwrap();
             if hour != current_hour {
                 hourly_checkpoints.push(*checkpoint);
                 current_hour = hour.to_string();
@@ -41,7 +59,12 @@ pub fn handle_merge(tag: String, dry_run: bool, pid: Option<i32>, keep_daily: bo
         hourly_checkpoints
     } else {
         // keep only the latest checkpoint
-        vec![*filtered_checkpoints.iter().max_by_key(|c| &c.dump_time).unwrap()]
+        vec![
+            *filtered_checkpoints
+                .iter()
+                .max_by_key(|c| &c.dump_time)
+                .unwrap(),
+        ]
     };
 
     if keep_checkpoints.is_empty() {
@@ -49,7 +72,10 @@ pub fn handle_merge(tag: String, dry_run: bool, pid: Option<i32>, keep_daily: bo
         std::process::exit(1);
     }
 
-    let merged_checkpoints = all_checkpoints.iter().filter(|c| !keep_checkpoints.contains(c)).collect::<Vec<_>>();
+    let merged_checkpoints = all_checkpoints
+        .iter()
+        .filter(|c| !keep_checkpoints.contains(c))
+        .collect::<Vec<_>>();
 
     if dry_run {
         println!("The following checkpoints will be merged:");

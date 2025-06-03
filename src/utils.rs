@@ -1,14 +1,14 @@
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
-use procfs::process::Process;
 use chrono;
 use comfy_table::Table;
 use dirs::home_dir;
+use procfs::process::Process;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::env;
-use std::sync::OnceLock;
 use std::fs::File;
-use std::path::{Path, PathBuf};
 use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 static HCRIU_DIR: OnceLock<PathBuf> = OnceLock::new();
 
@@ -30,7 +30,7 @@ pub fn set_hcriu_dir(hcriu_dir: PathBuf) {
 
 pub fn get_hcriu_dir() -> PathBuf {
     HCRIU_DIR.get().unwrap().clone()
-}       
+}
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointMeta {
@@ -58,7 +58,7 @@ impl CheckpointMeta {
             tag,
             dump_time,
         };
-        
+
         meta.update_checkpoint_id();
         meta
     }
@@ -94,15 +94,18 @@ fn get_process_cmd(pid: i32) -> String {
 
 pub fn get_all_checkpoints() -> Vec<CheckpointMeta> {
     let hcriu_dir = get_hcriu_dir();
-    std::fs::read_dir(hcriu_dir).unwrap().map(|c| {
-        let checkpoint = c.unwrap();
-        let meta_file = checkpoint.path().join("meta.toml");
-        let meta = CheckpointMeta::parse(std::fs::read_to_string(meta_file).unwrap());
-        meta
-    }).collect()
+    std::fs::read_dir(hcriu_dir)
+        .unwrap()
+        .map(|c| {
+            let checkpoint = c.unwrap();
+            let meta_file = checkpoint.path().join("meta.toml");
+            let meta = CheckpointMeta::parse(std::fs::read_to_string(meta_file).unwrap());
+            meta
+        })
+        .collect()
 }
 
-pub fn print_checkpoints_table(checkpoints: &Vec<&CheckpointMeta>) { 
+pub fn print_checkpoints_table(checkpoints: &Vec<&CheckpointMeta>) {
     let mut table = Table::new();
     table.set_header(vec!["Checkpoint ID", "Tag", "PID", "Command", "Dump Time"]);
     for checkpoint in checkpoints {

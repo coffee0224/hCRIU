@@ -1,13 +1,13 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use humantime::Duration;
 use rust_criu::Criu;
 use which::which;
-use humantime::Duration;
 
 mod dump;
-mod restore;
-mod utils;
 mod list;
 mod merge;
+mod restore;
+mod utils;
 
 #[derive(Debug, ValueEnum, Clone)]
 enum Sort {
@@ -52,9 +52,7 @@ enum Commands {
     },
 
     /// Restore container from checkpoint
-    Restore {
-        checkpoint_id: String,
-    },
+    Restore { checkpoint_id: String },
 
     /// List all checkpoints
     List {
@@ -92,7 +90,7 @@ fn find_criu_path() -> Option<String> {
 
 fn main() {
     let cli = Cli::parse();
-    
+
     // Find CRIU path if not provided
     let criu_path = if cli.criu_path.is_none() {
         if let Some(path) = find_criu_path() {
@@ -104,7 +102,7 @@ fn main() {
     } else {
         cli.criu_path.clone().unwrap()
     };
-    
+
     let mut criu = Criu::new_with_criu_path(criu_path).unwrap();
     let version = criu.get_criu_version().unwrap();
     println!("CRIU version: {}", version);
@@ -116,7 +114,12 @@ fn main() {
     }
 
     match cli.command {
-        Commands::Dump { pid, interval, tag, leave_running } => {
+        Commands::Dump {
+            pid,
+            interval,
+            tag,
+            leave_running,
+        } => {
             dump::handle_dump(&mut criu, pid, interval, tag, leave_running);
         }
         Commands::Restore { checkpoint_id } => {
@@ -125,7 +128,13 @@ fn main() {
         Commands::List { sort } => {
             list::handle_list(sort);
         }
-        Commands::Merge { tag, dry_run, pid, keep_daily, keep_hourly } => {
+        Commands::Merge {
+            tag,
+            dry_run,
+            pid,
+            keep_daily,
+            keep_hourly,
+        } => {
             merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly);
         }
     }
