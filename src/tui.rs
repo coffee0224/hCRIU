@@ -10,6 +10,122 @@ use ratatui::{
 };
 use std::{io, vec};
 
+fn get_checkoutpoints_list(checkpoints: Vec<&CheckpointMeta>) -> Vec<ListItem> {
+  checkpoints
+    .iter()
+    .map(|c| {
+      ListItem::from(Span::raw(format!(
+        "{}: {} ({} - {})",
+        c.checkpoint_id, c.tag, c.pid, c.dump_time
+      )))
+    })
+    .collect()
+}
+
+fn merge_checkpoints_message<'a>(
+  checkpoints: Vec<&'a CheckpointMeta>,
+  mut parts: std::str::SplitWhitespace<'_>,
+) -> Vec<ListItem<'a>> {
+  let tag = match parts.next() {
+    Some(tag) => tag.to_string(),
+    None => {
+      return vec![ListItem::new(Line::from(Span::raw(
+        "Please provide a tag for the merge command.",
+      )))];
+    }
+  };
+  let keep_daily = true; // default to true
+  let keep_hourly = false; // default to false
+
+  let mut filtered_checkpoints: Vec<&CheckpointMeta> = checkpoints
+    .iter()
+    .copied()
+    .filter(|c| c.tag == tag)
+    .collect();
+
+  filtered_checkpoints.sort_by(|a, b| a.dump_time.cmp(&b.dump_time));
+
+  // filter checkpoints by time
+  let keep_checkpoints: Vec<&CheckpointMeta> = if keep_daily {
+    // keep the latest checkpoint of each day
+    let mut daily_checkpoints = Vec::new();
+    let mut current_day = String::new();
+    for checkpoint in filtered_checkpoints.iter().rev() {
+      let day = checkpoint.dump_time.split(' ').next().unwrap();
+      if day != current_day {
+        daily_checkpoints.push(*checkpoint);
+        current_day = day.to_string();
+      }
+    }
+    daily_checkpoints
+  } else if keep_hourly {
+    // keep the latest checkpoint of each hour
+    let mut hourly_checkpoints = Vec::new();
+    let mut current_hour = String::new();
+    for checkpoint in filtered_checkpoints.iter().rev() {
+      let hour = checkpoint
+        .dump_time
+        .split(' ')
+        .nth(1)
+        .unwrap()
+        .split(':')
+        .next()
+        .unwrap();
+      if hour != current_hour {
+        hourly_checkpoints.push(*checkpoint);
+        current_hour = hour.to_string();
+      }
+    }
+    hourly_checkpoints
+  } else {
+    // keep only the latest checkpoint
+    filtered_checkpoints
+      .iter()
+      .max_by_key(|c| &c.dump_time)
+      .map(|c| vec![*c])
+      .unwrap_or_default()
+  };
+
+  if keep_checkpoints.is_empty() {
+    return vec![ListItem::new(Line::from(Span::raw(
+      "No checkpoints found for the given tag and pid.",
+    )))];
+  }
+
+  let merged_checkpoints: Vec<&CheckpointMeta> = checkpoints
+    .into_iter()
+    .filter(|c| !keep_checkpoints.contains(c))
+    .collect();
+
+  let mut items = vec![];
+  if let Some("dry-run") = parts.next() {
+    items.extend(vec![ListItem::new(Line::from(Span::raw(
+      "The following checkpoints will be merged:",
+    )))]);
+    items.extend(get_checkoutpoints_list(merged_checkpoints));
+    items.extend(vec![ListItem::new(Line::from(Span::raw(
+      "The following checkpoints will be kept:",
+    )))]);
+    items.extend(get_checkoutpoints_list(keep_checkpoints));
+    return items;
+  }
+
+  merged_checkpoints.iter().for_each(|c| {
+    // delete the checkpoint
+    let checkpoint_dir = crate::utils::get_hcriu_dir().join(c.checkpoint_id.clone());
+    std::fs::remove_dir_all(&checkpoint_dir).unwrap();
+    items.extend(vec![ListItem::new(Line::from(Span::raw(format!(
+      "Deleted checkpoint {}",
+      c.checkpoint_id
+    ))))]);
+  });
+  items.extend(vec![ListItem::new(Line::from(Span::raw(format!(
+    "Merged {:?} checkpoints",
+    merged_checkpoints.len()
+  ))))]);
+  items
+}
+
 pub fn show_checkpoints_tui(checkpoints: Vec<&CheckpointMeta>) {
   let mut stdout = io::stdout();
   let backend = CrosstermBackend::new(&mut stdout);
@@ -208,7 +324,9 @@ impl App {
           "Esc".bold(),
           " to stop editing, ".into(),
           "Enter".bold(),
-          " to record the message".into(),
+          " to submit the command. ".into(),
+          "Commands: ".into(),
+          "list, dump, merge.".bold(),
         ],
         Style::default(),
       ),
@@ -240,22 +358,16 @@ impl App {
       )),
     }
 
-    let message: Vec<ListItem> = match self.message.as_str() {
-      "list" => get_all_checkpoints()
-        .iter()
-        .map(|c| {
-          let content = Line::from(Span::raw(format!(
-            "{}: {} ({} - {})",
-            c.checkpoint_id, c.tag, c.pid, c.dump_time
-          )));
-          ListItem::new(content)
-        })
-        .collect(),
-      _ => {
-        vec![]
-      }
+    let mut parts = self.message.split_whitespace();
+    // Store all checkpoints in a variable so references live long enough
+    let all_checkpoints = get_all_checkpoints();
+    let checkpoints: Vec<&CheckpointMeta> = all_checkpoints.iter().collect();
+    let message: Vec<ListItem> = match parts.next() {
+      Some("list") => get_checkoutpoints_list(checkpoints.clone()),
+      Some("merge") => merge_checkpoints_message(checkpoints.clone(), parts),
+      _ => vec![],
     };
-    let message = List::new(message).block(Block::bordered().title("Messages"));
+    let message = List::new(message).block(Block::bordered().title("Output"));
     frame.render_widget(message, messages_area);
   }
 }
