@@ -33,7 +33,7 @@ struct Cli {
     tui: bool,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -118,29 +118,44 @@ fn main() {
         std::fs::create_dir_all(hcriu_dir).unwrap();
     }
 
-    match cli.command {
-        Commands::Dump {
-            pid,
-            interval,
-            tag,
-            leave_running,
-        } => {
-            dump::handle_dump(&mut criu, pid, interval, tag, leave_running);
+    // 如果tui参数为true，则进入交互式TUI模式
+    if cli.tui {
+        match cli.command {
+            Some(Commands::Dump {
+                pid,
+                interval,
+                tag,
+                leave_running,
+            }) => {
+                dump::handle_dump(&mut criu, pid, interval, tag, leave_running);
+            }
+            Some(Commands::Restore { checkpoint_id }) => {
+                restore::handle_restore(&mut criu, checkpoint_id);
+            }
+            Some(Commands::List { sort }) => {
+                list::handle_list(sort, cli.tui);
+            }
+            Some(Commands::Merge {
+                tag,
+                dry_run,
+                pid,
+                keep_daily,
+                keep_hourly,
+            }) => {
+                merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly, cli.tui);
+            }
+            None => {
+                tui::interactive_tui(|cmd| match cmd {
+                    "list" => {
+                        let mut checkpoints = utils::get_all_checkpoints();
+                        checkpoints.sort_by(|a, b| a.dump_time.cmp(&b.dump_time));
+                        tui::show_checkpoints_tui(checkpoints.iter().collect());
+                        String::from("已显示所有检查点 (按q返回)")
+                    }
+                    _ => format!("暂不支持的命令: {}", cmd),
+                });
+            }
         }
-        Commands::Restore { checkpoint_id } => {
-            restore::handle_restore(&mut criu, checkpoint_id);
-        }
-        Commands::List { sort } => {
-            list::handle_list(sort, cli.tui);
-        }
-        Commands::Merge {
-            tag,
-            dry_run,
-            pid,
-            keep_daily,
-            keep_hourly,
-        } => {
-            merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly, cli.tui);
-        }
+        return;
     }
 }
