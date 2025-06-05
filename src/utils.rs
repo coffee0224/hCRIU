@@ -32,7 +32,7 @@ pub fn get_hcriu_dir() -> PathBuf {
     HCRIU_DIR.get().unwrap().clone()
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct CheckpointMeta {
     pub checkpoint_id: String,
     pub pid: i32,
@@ -105,7 +105,7 @@ pub fn get_all_checkpoints() -> Vec<CheckpointMeta> {
         .collect()
 }
 
-pub fn print_checkpoints_table(checkpoints: &Vec<&CheckpointMeta>) {
+pub fn print_checkpoints_table(checkpoints: Vec<&CheckpointMeta>) {
     let mut table = Table::new();
     table.set_header(vec!["Checkpoint ID", "Tag", "PID", "Command", "Dump Time"]);
     for checkpoint in checkpoints {

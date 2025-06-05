@@ -7,6 +7,7 @@ mod dump;
 mod list;
 mod merge;
 mod restore;
+mod tui;
 mod utils;
 
 #[derive(Debug, ValueEnum, Clone)]
@@ -26,6 +27,10 @@ struct Cli {
     /// Specify checkpoints directory, where store all checkpoints
     #[arg(short = 'D', long, default_value = "~/.hcriu/")]
     hcriu_dir: String,
+
+    /// Use TUI output for list/merge
+    #[arg(short = 't', long, default_value = "false")]
+    tui: bool,
 
     #[command(subcommand)]
     command: Commands,
@@ -126,7 +131,7 @@ fn main() {
             restore::handle_restore(&mut criu, checkpoint_id);
         }
         Commands::List { sort } => {
-            list::handle_list(sort);
+            list::handle_list(sort, cli.tui);
         }
         Commands::Merge {
             tag,
@@ -135,7 +140,7 @@ fn main() {
             keep_daily,
             keep_hourly,
         } => {
-            merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly);
+            merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly, cli.tui);
         }
     }
 }
