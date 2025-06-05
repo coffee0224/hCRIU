@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use humantime::Duration;
 use rust_criu::Criu;
+use std::error::Error;
 use which::which;
 
 mod dump;
@@ -22,11 +23,11 @@ enum Sort {
 struct Cli {
   /// Specify CRIU executable path
   #[arg(long)]
-  criu_path: Option<String>,
+  path: Option<String>,
 
   /// Specify checkpoints directory, where store all checkpoints
-  #[arg(short = 'D', long, default_value = "~/.hcriu/")]
-  hcriu_dir: String,
+  #[arg(short = 'd', long, default_value = "~/.hcriu/")]
+  dir: String,
 
   /// Use TUI output for list/merge
   #[arg(short = 't', long, default_value = "false")]
@@ -93,69 +94,74 @@ fn find_criu_path() -> Option<String> {
   which("criu").ok().map(|p| p.to_string_lossy().into_owned())
 }
 
+fn handle_command(criu: &mut Criu, cli: &Cli) -> Result<(), Box<dyn Error>> {
+  match &cli.command {
+    Some(Commands::Dump {
+      pid,
+      interval,
+      tag,
+      leave_running,
+    }) => {
+      dump::handle_dump(criu, *pid, interval.clone(), tag.clone(), *leave_running);
+      Ok(())
+    }
+    Some(Commands::Restore { checkpoint_id }) => {
+      restore::handle_restore(criu, checkpoint_id.clone());
+      Ok(())
+    }
+    Some(Commands::List { sort }) => {
+      list::handle_list(sort.to_owned(), cli.tui);
+      Ok(())
+    }
+    Some(Commands::Merge {
+      tag,
+      dry_run,
+      pid,
+      keep_daily,
+      keep_hourly,
+    }) => {
+      merge::handle_merge(
+        tag.clone(),
+        *dry_run,
+        *pid,
+        *keep_daily,
+        *keep_hourly,
+        cli.tui,
+      );
+      Ok(())
+    }
+    None => {
+      if cli.tui {
+        tui::interactive_tui()?;
+      } else {
+        eprintln!("input command not found, please use --help to see available commands");
+      }
+      Ok(())
+    }
+  }
+}
+
 fn main() {
   let cli = Cli::parse();
 
   // Find CRIU path if not provided
-  let criu_path = if cli.criu_path.is_none() {
-    if let Some(path) = find_criu_path() {
-      path
-    } else {
-      eprintln!("criu not found in PATH, please specify --criu-path");
-      std::process::exit(1);
-    }
-  } else {
-    cli.criu_path.clone().unwrap()
+  let path = match &cli.path {
+    Some(path) => path.clone(),
+    None => match find_criu_path() {
+      Some(path) => path,
+      None => {
+        eprintln!("criu not found in PATH, please specify --criu-path");
+        std::process::exit(1);
+      }
+    },
   };
 
-  let mut criu = Criu::new_with_criu_path(criu_path).unwrap();
-  let version = criu.get_criu_version().unwrap();
-  println!("CRIU version: {}", version);
-
-  utils::set_hcriu_dir(cli.hcriu_dir.into());
-  let hcriu_dir = utils::get_hcriu_dir();
-  if !hcriu_dir.exists() {
-    std::fs::create_dir_all(hcriu_dir).unwrap();
+  let mut criu = Criu::new_with_criu_path(path).unwrap();
+  utils::set_hcriu_dir(cli.dir.clone().into());
+  let dir = utils::get_hcriu_dir();
+  if !dir.exists() {
+    std::fs::create_dir_all(dir).unwrap();
   }
 
-  // 如果tui参数为true，则进入交互式TUI模式
-  if cli.tui {
-    match cli.command {
-      Some(Commands::Dump {
-        pid,
-        interval,
-        tag,
-        leave_running,
-      }) => {
-        dump::handle_dump(&mut criu, pid, interval, tag, leave_running);
-      }
-      Some(Commands::Restore { checkpoint_id }) => {
-        restore::handle_restore(&mut criu, checkpoint_id);
-      }
-      Some(Commands::List { sort }) => {
-        list::handle_list(sort, cli.tui);
-      }
-      Some(Commands::Merge {
-        tag,
-        dry_run,
-        pid,
-        keep_daily,
-        keep_hourly,
-      }) => {
-        merge::handle_merge(tag, dry_run, pid, keep_daily, keep_hourly, cli.tui);
-      }
-      None => {
-        tui::interactive_tui(|cmd| match cmd {
-          "list" => {
-            let mut checkpoints = utils::get_all_checkpoints();
-            checkpoints.sort_by(|a, b| a.dump_time.cmp(&b.dump_time));
-            tui::show_checkpoints_tui(checkpoints.iter().collect());
-            String::from("已显示所有检查点 (按q返回)")
-          }
-          _ => format!("暂不支持的命令: {}", cmd),
-        });
-      }
-    }
-    return;
-  }
+  handle_command(&mut criu, &cli).unwrap();
 }
