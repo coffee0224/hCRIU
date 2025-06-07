@@ -42,12 +42,13 @@ fn dump_once(criu: &mut Criu, pid: i32, tag: &Option<String>, leave_running: boo
   let image_fd = std::fs::File::open(&image_dir).unwrap();
   criu.set_images_dir_fd(image_fd.as_raw_fd());
 
-  criu.set_log_level(4);
+  criu.set_log_level(0);
   criu.set_log_file("dump.log".to_string());
 
   criu.set_pid(pid);
   criu.set_leave_running(leave_running);
   criu.set_shell_job(true);
+  criu.set_ext_unix_sk(true);
 
   criu
     .dump()
