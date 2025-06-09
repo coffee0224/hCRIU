@@ -92,7 +92,7 @@ fn merge_checkpoints_message<'a>(
     )))];
   }
 
-  let merged_checkpoints: Vec<&CheckpointMeta> = checkpoints
+  let merged_checkpoints = filtered_checkpoints
     .into_iter()
     .filter(|c| !keep_checkpoints.contains(c))
     .collect();

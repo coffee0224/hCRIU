@@ -73,9 +73,8 @@ pub fn handle_merge(
     std::process::exit(1);
   }
 
-  // Fix: Use Vec<&CheckpointMeta> since .iter() returns references
-  let merged_checkpoints = all_checkpoints
-    .iter()
+  let merged_checkpoints = filtered_checkpoints
+    .into_iter()
     .filter(|c| !keep_checkpoints.contains(c))
     .collect::<Vec<_>>();
 
