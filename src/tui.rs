@@ -326,7 +326,7 @@ impl App {
           "Enter".bold(),
           " to submit the command. ".into(),
           "Commands: ".into(),
-          "list, dump, merge.".bold(),
+          "list, merge.".bold(),
         ],
         Style::default(),
       ),

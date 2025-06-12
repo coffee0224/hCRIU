@@ -2,22 +2,34 @@
 
 hCRIU is a tool to creat and restore checkpoint of process based on [CRIU](https://github.com/checkpoint-restore/criu). It support checkpoint manager, including periodically creat, merge and restore.
 
+## How to build
+Firstly, clone the project.
+
+Second, you need to install [criu](https://criu.org/Packages).  Or if you have [nix](https://nixos.org/download/) environment, use `nix develop .` to run into develop shell including [criu](https://criu.org/Packages). use `exit` command to exit the develop shell.
+
+```shell
+cargo build
+```
+
+the `hcriu` executable file is under `./target/debug/hCRIU`, you can `alias hcriu=./target/debug/hCRIU`, or `mv` it outside, whatever you like
+
+use `hcriu --help` to see command option
+
 ## How to use
-Firstly, you need to install [criu](https://criu.org/Packages).
 
 ### Create a checkpoint
 ```shell
 # Basic checkpoint creation
-hcriu dump <PID>
+hcriu [--tui] dump <PID>
 
 # Create checkpoint with a tag
-hcriu dump <PID> --tag my-checkpoint
+hcriu [--tui] dump <PID> --tag my-checkpoint
 
 # Create periodic checkpoints (e.g., every 10 seconds)
-hcriu dump <PID> --interval 10s
+hcriu [--tui] dump <PID> --interval 10s
 
 # Create checkpoint and leave the process running
-hcriu dump <PID> --leave-running
+hcriu [--tui] dump <PID> --leave-running
 ```
 
 ### Restore from checkpoint
@@ -29,10 +41,10 @@ hcriu restore <checkpoint-id>
 ### List checkpoints
 ```shell
 # List all checkpoints (sorted by time by default)
-hcriu list
+hcriu [--tui] list
 
 # List checkpoints sorted by PID
-hcriu list --sort pid
+hcriu [--tui] list --sort pid
 ```
 
 ### Merge checkpoints
@@ -56,6 +68,14 @@ hcriu merge <tag> --dry-run
 ### Additional Options
 - `--criu-path`: Specify custom CRIU executable path (default find by which)
 - `-D, --hcriu-dir`: Specify checkpoints directory (default: ~/.hcriu/)
+- `--help`: Show cli options
+
+### TUI Mode
+```shell
+hcriu --tui
+```
+
+press `e` to enter command, for example: `list`. this flow are shown in ppt, check it as you like.
 
 ## Useful Link
 
