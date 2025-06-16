@@ -3,6 +3,19 @@ name = "hCRIU"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "hcriu"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hcriu"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "hcriu-ui"
+path = "src/bin/tui.rs"
+
+
 [dependencies]
 bytesize = "2.0.1"
 chrono = "0.4.41"

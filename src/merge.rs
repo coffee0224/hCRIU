@@ -6,7 +6,6 @@ pub fn handle_merge(
   pid: Option<i32>,
   keep_daily: bool,
   keep_hourly: bool,
-  tui: bool,
 ) {
   let all_checkpoints = utils::get_all_checkpoints();
   let filtered_checkpoints = all_checkpoints
@@ -80,18 +79,10 @@ pub fn handle_merge(
     .collect::<Vec<_>>();
 
   if dry_run {
-    if tui {
-      use crate::tui::show_checkpoints_tui;
-      println!("The following checkpoints will be merged:");
-      show_checkpoints_tui(merged_checkpoints);
-      println!("The following checkpoints will be kept:");
-      show_checkpoints_tui(keep_checkpoints);
-    } else {
-      println!("The following checkpoints will be merged:");
-      utils::print_checkpoints_table(merged_checkpoints);
-      println!("The following checkpoints will be kept:");
-      utils::print_checkpoints_table(keep_checkpoints);
-    }
+    println!("The following checkpoints will be merged:");
+    utils::print_checkpoints_table(merged_checkpoints);
+    println!("The following checkpoints will be kept:");
+    utils::print_checkpoints_table(keep_checkpoints);
   } else {
     merged_checkpoints.iter().for_each(|c| {
       // delete the checkpoint

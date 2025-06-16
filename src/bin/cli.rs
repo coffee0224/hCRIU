@@ -1,25 +1,14 @@
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, CommandFactory};
 use humantime::Duration;
 use rust_criu::Criu;
 use std::error::Error;
 use which::which;
+use hcriu::{dump, list, merge, restore, utils, Sort};
 
-mod dump;
-mod list;
-mod merge;
-mod restore;
-mod tui;
-mod utils;
-
-#[derive(Debug, ValueEnum, Clone)]
-enum Sort {
-  Time,
-  Pid,
-}
 
 #[derive(Debug, Parser)]
-#[command(name = "hCRIU")]
-#[command(about = "checkpoint management tool")]
+#[command(name = "hcriu")]
+#[command(about = "hCRIU is a checkpoint management tool based CRIU")]
 struct Cli {
   /// Specify CRIU executable path
   #[arg(long)]
@@ -28,10 +17,6 @@ struct Cli {
   /// Specify checkpoints directory, where store all checkpoints
   #[arg(short = 'd', long, default_value = "~/.hcriu/")]
   dir: String,
-
-  /// Use TUI output for list/merge
-  #[arg(short = 't', long, default_value = "false")]
-  tui: bool,
 
   #[command(subcommand)]
   command: Option<Commands>,
@@ -110,7 +95,7 @@ fn handle_command(criu: &mut Criu, cli: &Cli) -> Result<(), Box<dyn Error>> {
       Ok(())
     }
     Some(Commands::List { sort }) => {
-      list::handle_list(sort.to_owned(), cli.tui);
+      list::handle_list(sort.to_owned());
       Ok(())
     }
     Some(Commands::Merge {
@@ -126,16 +111,11 @@ fn handle_command(criu: &mut Criu, cli: &Cli) -> Result<(), Box<dyn Error>> {
         *pid,
         *keep_daily,
         *keep_hourly,
-        cli.tui,
       );
       Ok(())
     }
     None => {
-      if cli.tui {
-        tui::interactive_tui()?;
-      } else {
-        eprintln!("input command not found, please use --help to see available commands");
-      }
+      Cli::command().print_help().unwrap();
       Ok(())
     }
   }
