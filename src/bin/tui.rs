@@ -1,14 +1,27 @@
 use std::{io::stdout, ops::ControlFlow, time::Duration};
+use std::path::PathBuf;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind, MouseButton, MouseEvent};
 use crossterm::execute;
 use ratatui::{
-    layout::{Constraint, Layout, Position},
-    widgets::{Block, Borders, List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState},
-    style::{Style, Color},
+    layout::{Constraint, Layout, Position, Rect, Alignment, Direction},
+    widgets::{Block, Borders, List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState, Paragraph, Clear},
+    style::{Style, Color, Modifier},
+    text::{Line, Span},
     Frame,
 };
-use hcriu::utils::{CheckpointMeta, get_all_checkpoints, set_hcriu_dir};
-use std::path::PathBuf;
+use rust_criu::Criu;
+use which::which;
+
+use hcriu::utils::{CheckpointMeta, get_all_checkpoints, set_hcriu_dir, get_hcriu_dir};
+use hcriu::restore::handle_restore;
+
+fn find_criu_path() -> Option<String> {
+  which("criu").ok().map(|p| p.to_string_lossy().into_owned())
+}
+
+struct RestorePopup {
+    checkpoint_id: String,
+}
 
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
@@ -22,7 +35,6 @@ fn main() -> std::io::Result<()> {
     set_hcriu_dir(hcriu_dir);
     
     // Initialize app state
-
     let checkpoints = get_all_checkpoints();
     let mut app_state = AppState::new(checkpoints);
     
@@ -72,7 +84,7 @@ fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app
     let items: Vec<ListItem> = app_state.checkpoints
         .iter()
         .map(|checkpoint| {
-            ListItem::new(format!("{}  {}  {}  {}", 
+            ListItem::new(format!("{}  {} {} {}", 
                 checkpoint.checkpoint_id[..7].to_string(),
                 checkpoint.tag,
                 checkpoint.pid,
@@ -119,6 +131,55 @@ fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app
             .borders(Borders::empty()),
         status_area,
     );
+    
+    // Render popup if it's active
+    if app_state.show_popup {
+        draw_popup(frame, app_state);
+    }
+}
+
+fn draw_popup(frame: &mut Frame, app_state: &mut AppState) {
+    let area = frame.area();
+    
+    // Calculate popup size and position
+    let popup_width = 40;
+    let popup_height = 6;
+    let popup_x = (area.width - popup_width) / 2;
+    let popup_y = (area.height - popup_height) / 2;
+    
+    let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
+    
+    // Render popup background
+    frame.render_widget(Clear, popup_area);
+    
+    // Render popup block
+    let popup_block = Block::default()
+        .title("Menu")
+        .borders(Borders::ALL)
+        .style(Style::default().bg(Color::Black).fg(Color::White));
+    
+    frame.render_widget(&popup_block, popup_area);
+    
+    // Create menu items
+    let menu_items = vec![
+        "r restore checkpoint to process",
+        "d delete checkpoint",
+    ];
+    
+    // Create list items
+    let items: Vec<ListItem> = menu_items
+        .iter()
+        .map(|item| ListItem::new(*item))
+        .collect();
+    
+    // Create list widget
+    let inner_area = popup_block.inner(popup_area);
+    let list = List::new(items)
+        .highlight_style(Style::default().bg(Color::DarkGray))
+        .highlight_symbol(" ");
+    
+    // Render list with state
+    frame.render_stateful_widget(list, inner_area, &mut app_state.popup_state);
 }
 
 
@@ -208,10 +269,38 @@ fn handle_mouse_events(
 }
 
 fn handle_key_events(key: KeyCode, focused_area: &mut FocusedArea, app_state: &mut AppState) -> bool {
+    // If popup is active, handle popup navigation
+    if app_state.show_popup {
+        match key {
+            KeyCode::Esc => {
+                app_state.show_popup = false;
+            }
+            KeyCode::Up => {
+                app_state.popup_previous();
+            }
+            KeyCode::Down => {
+                app_state.popup_next();
+            }
+            KeyCode::Enter => {
+                handle_popup_action(app_state);
+                app_state.show_popup = false;
+            }
+            _ => {}
+        }
+        return false;
+    }
+    
+    // Normal key handling
     match key {
         KeyCode::Char('q') => {
             // Exit the application
             return true;
+        }
+        KeyCode::Char('x') => {
+            if *focused_area == FocusedArea::Checkpoints && !app_state.checkpoints.is_empty() {
+                app_state.show_popup = true;
+                app_state.popup_state.select(Some(0));
+            }
         }
         KeyCode::Up => {
             if *focused_area == FocusedArea::Checkpoints {
@@ -228,11 +317,41 @@ fn handle_key_events(key: KeyCode, focused_area: &mut FocusedArea, app_state: &m
     return false;
 }
 
+fn handle_popup_action(app_state: &mut AppState) {
+    if let Some(selected_checkpoint_idx) = app_state.checkpoints_state.selected() {
+        if selected_checkpoint_idx < app_state.checkpoints.len() {
+            let checkpoint = &app_state.checkpoints[selected_checkpoint_idx];
+            
+            match app_state.popup_state.selected() {
+                Some(0) => {
+                    let path = match find_criu_path() {
+      Some(path) => path,
+      None => {
+        eprintln!("criu not found in PATH, please specify --criu-path");
+        std::process::exit(1);
+      }
+    };
+                    let mut criu = Criu::new_with_criu_path(path).unwrap();
+                    handle_restore(&mut criu, checkpoint.checkpoint_id.clone());
+
+                }
+                Some(1) => {
+                    let checkpoint_dir = get_hcriu_dir().join(checkpoint.checkpoint_id.clone());
+                    std::fs::remove_dir_all(&checkpoint_dir).unwrap();
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 // Application state to manage the list state and scrollbar
 struct AppState {
     checkpoints: Vec<CheckpointMeta>,
     checkpoints_state: ListState,
     scrollbar_state: ScrollbarState,
+    show_popup: bool,
+    popup_state: ListState,
 }
 
 impl AppState {
@@ -241,6 +360,8 @@ impl AppState {
             checkpoints,
             checkpoints_state: ListState::default(),
             scrollbar_state: ScrollbarState::default(),
+            show_popup: false,
+            popup_state: ListState::default(),
         };
         
         // Initialize with first item selected if list is not empty
@@ -280,5 +401,33 @@ impl AppState {
         };
         self.checkpoints_state.select(Some(i));
         self.scrollbar_state = self.scrollbar_state.position(i);
+    }
+    
+    fn popup_next(&mut self) {
+        let i = match self.popup_state.selected() {
+            Some(i) => {
+                if i >= 1 { // Only 2 options in popup
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.popup_state.select(Some(i));
+    }
+    
+    fn popup_previous(&mut self) {
+        let i = match self.popup_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    1 // Only 2 options in popup
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.popup_state.select(Some(i));
     }
 }
