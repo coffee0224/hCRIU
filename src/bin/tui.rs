@@ -174,15 +174,25 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
         .collect();
     
     // Highlight the selected process
-    if let Some(selected_process_idx) = app_state.processes_scrollbar {
+    if let Some(selected_process_idx) = app_state.processes_seleted {
         if selected_process_idx < app_state.processes.len() {
             process_items[selected_process_idx].style = Style::default().fg(Color::Green);
         }
     }
 
     // Create the list widget for processes
-    // let processes_list = Paragraph::new(process_items).scroll((app_state.processes_scrollbar as u16, 0));
-    let processes_list = Paragraph::new(process_items);
+    let page_items = processes_inner_area.height as usize;
+    
+    if let Some(selected_process_idx) = app_state.processes_seleted {
+        if selected_process_idx >= app_state.processes_scroll + page_items {
+            app_state.processes_scroll = selected_process_idx - page_items + 1;
+        } else if selected_process_idx < app_state.processes_scroll {
+            app_state.processes_scroll = selected_process_idx;
+        }
+    }
+    
+    let processes_list = Paragraph::new(process_items)
+        .scroll((app_state.processes_scroll as u16, 0));
     
     // Render the processes list with state
     frame.render_widget(processes_list, processes_inner_area);
@@ -446,7 +456,7 @@ fn handle_popup_action(app_state: &mut AppState) {
             }
         },
         PopupType::Process => {
-            if let Some(selected_process_idx) = app_state.processes_scrollbar {
+            if let Some(selected_process_idx) = app_state.processes_seleted {
                 if selected_process_idx < app_state.processes.len() {
                     let process = &app_state.processes[selected_process_idx];
                     
@@ -501,7 +511,8 @@ struct AppState {
     // process widget
     processes: Vec<ProcessInfo>,
     processes_scrollbar_state: ScrollbarState,
-    processes_scrollbar: Option<usize>,
+    processes_seleted: Option<usize>,
+    processes_scroll: usize,
 
     // popup widget
     show_popup: bool,
@@ -519,13 +530,14 @@ impl AppState {
             scrollbar_state: ScrollbarState::default(),
             processes: Vec::new(),
             processes_scrollbar_state: ScrollbarState::default(),
+            processes_scroll: 0,
             show_popup: false,
             popup_state: ListState::default(),
             popup_type: PopupType::Checkpoint,
             focused_area: FocusedArea::Checkpoints,
             last_update: Instant::now(),
             update_interval: Duration::from_secs(1),
-            processes_scrollbar: None,
+            processes_seleted: None,
             checkpoints_popup: vec![
             "r restore checkpoint to process",
             "d delete checkpoint",
@@ -619,7 +631,7 @@ impl AppState {
     }
     
     fn processes_next(&mut self) {
-        let i = match self.processes_scrollbar {
+        let i = match self.processes_seleted {
             Some(i) => {
                 if i >= self.processes.len() - 1 {
                     0
@@ -629,12 +641,12 @@ impl AppState {
             }
             None => 0,
         };
-        self.processes_scrollbar = Some(i);
+        self.processes_seleted = Some(i);
         self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
     }
     
     fn processes_previous(&mut self) {
-        let i = match self.processes_scrollbar {
+        let i = match self.processes_seleted {
             Some(i) => {
                 if i == 0 {
                     self.processes.len() - 1
@@ -644,7 +656,7 @@ impl AppState {
             }
             None => 0,
         };
-        self.processes_scrollbar = Some(i);
+        self.processes_seleted = Some(i);
         self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
     }
 }
