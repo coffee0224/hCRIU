@@ -53,9 +53,9 @@ fn main() -> std::io::Result<()> {
     set_hcriu_dir(hcriu_dir);
     
     // Initialize app state
-    let checkpoints = get_all_checkpoints();
-    let mut app_state = AppState::new(checkpoints);
-    
+    let mut app_state = AppState::new();
+    app_state.checkpoints = get_all_checkpoints();
+
     // Initial process list load
     app_state.processes = get_all_processes();
     if !app_state.processes.is_empty() {
@@ -67,6 +67,7 @@ fn main() -> std::io::Result<()> {
         // Update process list if interval has elapsed
         if app_state.last_update.elapsed() >= app_state.update_interval {
             app_state.processes = get_all_processes();
+            app_state.checkpoints = get_all_checkpoints();
             app_state.last_update = Instant::now();
         }
         
@@ -502,9 +503,9 @@ struct AppState {
 }
 
 impl AppState {
-    fn new(checkpoints: Vec<CheckpointMeta>) -> Self {
+    fn new() -> Self {
         let mut state = Self {
-            checkpoints,
+            checkpoints: Vec::new(),
             checkpoints_state: ListState::default(),
             scrollbar_state: ScrollbarState::default(),
             processes: Vec::new(),
