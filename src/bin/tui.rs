@@ -26,7 +26,6 @@ struct RestorePopup {
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
     execute!(stdout(), EnableMouseCapture)?;
-    let mut focused_area = FocusedArea::Checkpoints;
     let widgets = WidgetsArea::new(&terminal.get_frame());
     
     // Initialize hcriu directory
@@ -39,8 +38,8 @@ fn main() -> std::io::Result<()> {
     let mut app_state = AppState::new(checkpoints);
     
     loop {
-        terminal.draw(|f| draw(f, focused_area, &widgets, &mut app_state)).expect("failed to draw frame");
-        if handle_events(&widgets, &mut focused_area, &mut app_state)? {
+        terminal.draw(|f| draw(f, &widgets, &mut app_state)).expect("failed to draw frame");
+        if handle_events(&widgets, &mut app_state)? {
             break;
         }
     }
@@ -52,7 +51,7 @@ fn main() -> std::io::Result<()> {
 }
 
 
-fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app_state: &mut AppState) {
+fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
     let default_border_style = Style::default().fg(Color::White);
     let focused_border_style = Style::default().fg(Color::Green);
     let [title_area, checkpoints_area, tasks_area, processes_area, status_area] = [
@@ -67,7 +66,7 @@ fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app
         Block::default()
             .title("hcriu-ui")
             .borders(Borders::ALL)
-            .border_style(if focused_area == FocusedArea::Title { focused_border_style } else { default_border_style }),
+            .border_style(if app_state.focused_area == FocusedArea::Title { focused_border_style } else { default_border_style }),
         title_area,
     );
     
@@ -75,7 +74,7 @@ fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app
     let checkpoints_block = Block::default()
         .title("Checkpoints")
         .borders(Borders::ALL)
-        .border_style(if focused_area == FocusedArea::Checkpoints { focused_border_style } else { default_border_style });
+        .border_style(if app_state.focused_area == FocusedArea::Checkpoints { focused_border_style } else { default_border_style });
     
     let inner_area = checkpoints_block.inner(checkpoints_area);
     frame.render_widget(checkpoints_block, checkpoints_area);
@@ -116,14 +115,14 @@ fn draw(frame: &mut Frame, focused_area: FocusedArea, widgets: &WidgetsArea, app
         Block::default()
             .title("Tasks")
             .borders(Borders::ALL)
-            .border_style(if focused_area == FocusedArea::Tasks { focused_border_style } else { default_border_style }),
+            .border_style(if app_state.focused_area == FocusedArea::Tasks { focused_border_style } else { default_border_style }),
         tasks_area,
     );
     frame.render_widget(
         Block::default()
             .title("Processes")
             .borders(Borders::ALL)
-            .border_style(if focused_area == FocusedArea::Processes { focused_border_style } else { default_border_style }),
+            .border_style(if app_state.focused_area == FocusedArea::Processes { focused_border_style } else { default_border_style }),
         processes_area,
     );
     frame.render_widget(
@@ -229,13 +228,13 @@ enum FocusedArea {
     Processes,
 }
 
-fn handle_events(widgets: &WidgetsArea, focused_area: &mut FocusedArea, app_state: &mut AppState) -> std::io::Result<bool> {
+fn handle_events(widgets: &WidgetsArea, app_state: &mut AppState) -> std::io::Result<bool> {
     match event::read()? {
         Event::Mouse(mouse_event) => {
-            handle_mouse_events(mouse_event, focused_area, widgets);
+            handle_mouse_events(mouse_event, app_state, widgets);
         }
         Event::Key(key) if key.kind == KeyEventKind::Press =>  {
-            return Ok(handle_key_events(key.code, focused_area, app_state));
+            return Ok(handle_key_events(key.code, app_state));
         },
         _ => {}
     }
@@ -244,7 +243,7 @@ fn handle_events(widgets: &WidgetsArea, focused_area: &mut FocusedArea, app_stat
 
 fn handle_mouse_events(
     mouse_event: MouseEvent,
-    focused_area: &mut FocusedArea,
+    app_state: &mut AppState,
     widgets: &WidgetsArea,
 ) {
     match mouse_event.kind {
@@ -257,18 +256,18 @@ fn handle_mouse_events(
             let mouse_pos = Position { x: mouse_event.column, y: mouse_event.row };
             // Check which area was clicked based on `mouse_pos` and update `focused_area`
             if checkpoints_area.contains(mouse_pos) {
-                *focused_area = FocusedArea::Checkpoints;
+                app_state.set_focused_area(FocusedArea::Checkpoints);
             } else if tasks_area.contains(mouse_pos) {
-                *focused_area = FocusedArea::Tasks;
+                app_state.set_focused_area(FocusedArea::Tasks);
             } else if processes_area.contains(mouse_pos) {
-                *focused_area = FocusedArea::Processes;
+                app_state.set_focused_area(FocusedArea::Processes);
             }
         }
         _ => {}
     }
 }
 
-fn handle_key_events(key: KeyCode, focused_area: &mut FocusedArea, app_state: &mut AppState) -> bool {
+fn handle_key_events(key: KeyCode, app_state: &mut AppState) -> bool {
     // If popup is active, handle popup navigation
     if app_state.show_popup {
         match key {
@@ -297,18 +296,18 @@ fn handle_key_events(key: KeyCode, focused_area: &mut FocusedArea, app_state: &m
             return true;
         }
         KeyCode::Char('x') => {
-            if *focused_area == FocusedArea::Checkpoints && !app_state.checkpoints.is_empty() {
+            if app_state.focused_area == FocusedArea::Checkpoints && !app_state.checkpoints.is_empty() {
                 app_state.show_popup = true;
                 app_state.popup_state.select(Some(0));
             }
         }
         KeyCode::Up => {
-            if *focused_area == FocusedArea::Checkpoints {
+            if app_state.focused_area == FocusedArea::Checkpoints {
                 app_state.previous();
             }
         }
         KeyCode::Down => {
-            if *focused_area == FocusedArea::Checkpoints {
+            if app_state.focused_area == FocusedArea::Checkpoints {
                 app_state.next();
             }
         }
@@ -352,6 +351,7 @@ struct AppState {
     scrollbar_state: ScrollbarState,
     show_popup: bool,
     popup_state: ListState,
+    focused_area: FocusedArea,
 }
 
 impl AppState {
@@ -362,6 +362,7 @@ impl AppState {
             scrollbar_state: ScrollbarState::default(),
             show_popup: false,
             popup_state: ListState::default(),
+            focused_area: FocusedArea::Checkpoints,
         };
         
         // Initialize with first item selected if list is not empty
@@ -429,5 +430,9 @@ impl AppState {
             None => 0,
         };
         self.popup_state.select(Some(i));
+    }
+    
+    fn set_focused_area(&mut self, area: FocusedArea) {
+        self.focused_area = area;
     }
 }
