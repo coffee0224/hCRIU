@@ -5,7 +5,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton
 use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::widgets::{Block, Clear, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 use ratatui::Frame;
 use rust_criu::Criu;
 use which::which;
@@ -216,20 +216,15 @@ fn draw_popup(frame: &mut Frame, app_state: &mut AppState) {
         .title("Menu")
         .borders(Borders::ALL)
         .style(Style::default().bg(Color::Black).fg(Color::White));
-    
+
+    // clears out any background in the area before rendering the popup
+    frame.render_widget(Clear, popup_area);
     frame.render_widget(&popup_block, popup_area);
     
     // Create menu items based on popup type
     let menu_items = match app_state.popup_type {
-        PopupType::Checkpoint => vec![
-            "r restore checkpoint to process",
-            "d delete checkpoint",
-        ],
-        PopupType::Process => vec![
-            "s take a snapshot and stop",
-            "l take a snapshot and leave running",
-            "p take snapshots periodly",
-        ],
+        PopupType::Checkpoint => &app_state.checkpoints_popup,
+        PopupType::Process => &app_state.processes_popup,
     };
     
     // Create list items
@@ -477,7 +472,7 @@ struct ProcessInfo {
 }
 
 // Popup menu type
-#[derive(PartialEq, Debug, Copy, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 enum PopupType {
     Checkpoint,
     Process,
@@ -502,6 +497,8 @@ struct AppState {
     show_popup: bool,
     popup_state: ListState,
     popup_type: PopupType,
+    checkpoints_popup: Vec<&'static str>,
+    processes_popup: Vec<&'static str>,
 }
 
 impl AppState {
@@ -519,6 +516,15 @@ impl AppState {
             focused_area: FocusedArea::Checkpoints,
             last_update: Instant::now(),
             update_interval: Duration::from_secs(1),
+            checkpoints_popup: vec![
+            "r restore checkpoint to process",
+            "d delete checkpoint",
+            ],
+            processes_popup: vec![
+            "s take a snapshot and stop",
+            "l take a snapshot and leave running",
+            "p take periodic snapshots",
+            ],
         };
         
         // Initialize with first item selected if list is not empty
@@ -561,9 +567,14 @@ impl AppState {
     }
     
     fn popup_next(&mut self) {
+        let n = match self.popup_type {
+            PopupType::Checkpoint => self.checkpoints_popup.len(),
+            PopupType::Process => self.processes_popup.len(),
+        };
+
         let i = match self.popup_state.selected() {
             Some(i) => {
-                if i >= 1 { // Only 2 options in popup
+                if i >= n - 1 {
                     0
                 } else {
                     i + 1
@@ -575,10 +586,15 @@ impl AppState {
     }
     
     fn popup_previous(&mut self) {
+        let n = match self.popup_type {
+            PopupType::Checkpoint => self.checkpoints_popup.len(),
+            PopupType::Process => self.processes_popup.len(),
+        };
+        
         let i = match self.popup_state.selected() {
             Some(i) => {
                 if i == 0 {
-                    1 // Only 2 options in popup
+                    n - 1
                 } else {
                     i - 1
                 }
