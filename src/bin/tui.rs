@@ -1,14 +1,12 @@
-use std::{io::stdout, ops::ControlFlow, time::Duration};
 use std::path::PathBuf;
-use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, MouseEventKind, MouseButton, MouseEvent};
-use crossterm::execute;
-use ratatui::{
-    layout::{Constraint, Layout, Position, Rect, Alignment, Direction},
-    widgets::{Block, Borders, List, ListItem, ListState, Scrollbar, ScrollbarOrientation, ScrollbarState, Paragraph, Clear},
-    style::{Style, Color, Modifier},
-    text::{Line, Span},
-    Frame,
-};
+use std::time::{Duration, Instant};
+
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span, Text};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::Frame;
 use rust_criu::Criu;
 use which::which;
 
@@ -19,13 +17,34 @@ fn find_criu_path() -> Option<String> {
   which("criu").ok().map(|p| p.to_string_lossy().into_owned())
 }
 
-struct RestorePopup {
-    checkpoint_id: String,
+
+/**
+ * Get information about all processes in the system
+ * 
+ * Returns a vector of ProcessInfo structs containing PID, name, and command line
+ */
+fn get_all_processes() -> Vec<ProcessInfo> {
+    let mut processes = Vec::new();
+    if let Ok(all_procs) = procfs::process::all_processes() {
+        for proc_result in all_procs {
+            if let Ok(process) = proc_result {
+                if let Ok(status) = process.status() {
+                    let name = status.name;
+                    let cmd = process.cmdline().unwrap_or_default().join(" ");
+                    processes.push(ProcessInfo {
+                        pid: process.pid,
+                        name,
+                        cmd,
+                    });
+                }
+            }
+        }
+    }
+    processes
 }
 
 fn main() -> std::io::Result<()> {
     let mut terminal = ratatui::init();
-    execute!(stdout(), EnableMouseCapture)?;
     let widgets = WidgetsArea::new(&terminal.get_frame());
     
     // Initialize hcriu directory
@@ -37,16 +56,26 @@ fn main() -> std::io::Result<()> {
     let checkpoints = get_all_checkpoints();
     let mut app_state = AppState::new(checkpoints);
     
+    // Initial process list load
+    app_state.processes = get_all_processes();
+    if !app_state.processes.is_empty() {
+        app_state.processes_state.select(Some(0));
+        app_state.processes_scrollbar_state = app_state.processes_scrollbar_state.position(0);
+    }
+    
     loop {
+        // Update process list if interval has elapsed
+        if app_state.last_update.elapsed() >= app_state.update_interval {
+            app_state.processes = get_all_processes();
+            app_state.last_update = Instant::now();
+        }
+        
         terminal.draw(|f| draw(f, &widgets, &mut app_state)).expect("failed to draw frame");
         if handle_events(&widgets, &mut app_state)? {
             break;
         }
     }
     ratatui::restore();
-    if let Err(err) = execute!(stdout(), DisableMouseCapture) {
-        eprintln!("Error disabling mouse capture: {err}");
-    }
     Ok(())
 }
 
@@ -83,7 +112,7 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
     let items: Vec<ListItem> = app_state.checkpoints
         .iter()
         .map(|checkpoint| {
-            ListItem::new(format!("{}  {} {} {}", 
+            ListItem::new(format!("{} {} {} {}", 
                 checkpoint.checkpoint_id[..7].to_string(),
                 checkpoint.tag,
                 checkpoint.pid,
@@ -118,13 +147,47 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
             .border_style(if app_state.focused_area == FocusedArea::Tasks { focused_border_style } else { default_border_style }),
         tasks_area,
     );
-    frame.render_widget(
-        Block::default()
-            .title("Processes")
-            .borders(Borders::ALL)
-            .border_style(if app_state.focused_area == FocusedArea::Processes { focused_border_style } else { default_border_style }),
-        processes_area,
+    
+    // Render processes list with scrollbar
+    let processes_block = Block::default()
+        .title("Processes")
+        .borders(Borders::ALL)
+        .border_style(if app_state.focused_area == FocusedArea::Processes { focused_border_style } else { default_border_style });
+    
+    let processes_inner_area = processes_block.inner(processes_area);
+    frame.render_widget(processes_block, processes_area);
+    
+    // Create list items from processes
+    let process_items: Vec<ListItem> = app_state.processes
+        .iter()
+        .map(|process| {
+            ListItem::new(format!("{:<6} {:<15} {}", 
+                process.pid,
+                process.name,
+                process.cmd,
+            ))
+        })
+        .collect();
+    
+    // Create the list widget for processes
+    let processes_list = List::new(process_items)
+        .highlight_style(Style::default().bg(Color::DarkGray))
+        .highlight_symbol(" ");
+    
+    // Render the processes list with state
+    frame.render_stateful_widget(processes_list, processes_inner_area, &mut app_state.processes_state);
+    
+    // Render processes scrollbar
+    let processes_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+    
+    frame.render_stateful_widget(
+        processes_scrollbar,
+        processes_inner_area,
+        &mut app_state.processes_scrollbar_state,
     );
+    
     frame.render_widget(
         Block::default()
             .borders(Borders::empty()),
@@ -149,9 +212,6 @@ fn draw_popup(frame: &mut Frame, app_state: &mut AppState) {
     let popup_area = Rect::new(popup_x, popup_y, popup_width, popup_height);
     
     // Render popup background
-    frame.render_widget(Clear, popup_area);
-    
-    // Render popup block
     let popup_block = Block::default()
         .title("Menu")
         .borders(Borders::ALL)
@@ -159,11 +219,18 @@ fn draw_popup(frame: &mut Frame, app_state: &mut AppState) {
     
     frame.render_widget(&popup_block, popup_area);
     
-    // Create menu items
-    let menu_items = vec![
-        "r restore checkpoint to process",
-        "d delete checkpoint",
-    ];
+    // Create menu items based on popup type
+    let menu_items = match app_state.popup_type {
+        PopupType::Checkpoint => vec![
+            "r restore checkpoint to process",
+            "d delete checkpoint",
+        ],
+        PopupType::Process => vec![
+            "s take a snapshot and stop",
+            "l take a snapshot and leave running",
+            "p take snapshots periodly",
+        ],
+    };
     
     // Create list items
     let items: Vec<ListItem> = menu_items
@@ -233,8 +300,8 @@ fn handle_events(widgets: &WidgetsArea, app_state: &mut AppState) -> std::io::Re
         Event::Mouse(mouse_event) => {
             handle_mouse_events(mouse_event, app_state, widgets);
         }
-        Event::Key(key) if key.kind == KeyEventKind::Press =>  {
-            return Ok(handle_key_events(key.code, app_state));
+        Event::Key(key) => {
+            return Ok(handle_key_events(key.code, key.modifiers, app_state));
         },
         _ => {}
     }
@@ -267,7 +334,7 @@ fn handle_mouse_events(
     }
 }
 
-fn handle_key_events(key: KeyCode, app_state: &mut AppState) -> bool {
+fn handle_key_events(key: KeyCode, _modifiers: KeyModifiers, app_state: &mut AppState) -> bool {
     // If popup is active, handle popup navigation
     if app_state.show_popup {
         match key {
@@ -297,18 +364,27 @@ fn handle_key_events(key: KeyCode, app_state: &mut AppState) -> bool {
         }
         KeyCode::Char('x') => {
             if app_state.focused_area == FocusedArea::Checkpoints && !app_state.checkpoints.is_empty() {
+                app_state.popup_type = PopupType::Checkpoint;
+                app_state.show_popup = true;
+                app_state.popup_state.select(Some(0));
+            } else if app_state.focused_area == FocusedArea::Processes && !app_state.processes.is_empty() {
+                app_state.popup_type = PopupType::Process;
                 app_state.show_popup = true;
                 app_state.popup_state.select(Some(0));
             }
         }
         KeyCode::Up => {
-            if app_state.focused_area == FocusedArea::Checkpoints {
-                app_state.previous();
+            match app_state.focused_area {
+                FocusedArea::Checkpoints => app_state.checkpoints_previous(),
+                FocusedArea::Processes => app_state.processes_previous(),
+                _ => {}
             }
         }
         KeyCode::Down => {
-            if app_state.focused_area == FocusedArea::Checkpoints {
-                app_state.next();
+            match app_state.focused_area {
+                FocusedArea::Checkpoints => app_state.checkpoints_next(),
+                FocusedArea::Processes => app_state.processes_next(),
+                _ => {}
             }
         }
         KeyCode::Tab => {
@@ -335,41 +411,97 @@ fn handle_key_events(key: KeyCode, app_state: &mut AppState) -> bool {
 }
 
 fn handle_popup_action(app_state: &mut AppState) {
-    if let Some(selected_checkpoint_idx) = app_state.checkpoints_state.selected() {
-        if selected_checkpoint_idx < app_state.checkpoints.len() {
-            let checkpoint = &app_state.checkpoints[selected_checkpoint_idx];
-            
-            match app_state.popup_state.selected() {
-                Some(0) => {
-                    let path = match find_criu_path() {
-      Some(path) => path,
-      None => {
-        eprintln!("criu not found in PATH, please specify --criu-path");
-        std::process::exit(1);
-      }
-    };
-                    let mut criu = Criu::new_with_criu_path(path).unwrap();
-                    handle_restore(&mut criu, checkpoint.checkpoint_id.clone());
-
+    match app_state.popup_type {
+        PopupType::Checkpoint => {
+            if let Some(selected_checkpoint_idx) = app_state.checkpoints_state.selected() {
+                if selected_checkpoint_idx < app_state.checkpoints.len() {
+                    let checkpoint = &app_state.checkpoints[selected_checkpoint_idx];
+                    
+                    match app_state.popup_state.selected() {
+                        Some(0) => {
+                            // Restore checkpoint
+                            let path = match find_criu_path() {
+                                Some(path) => path,
+                                None => {
+                                    eprintln!("criu not found in PATH, please specify --criu-path");
+                                    std::process::exit(1);
+                                }
+                            };
+                            let mut criu = Criu::new_with_criu_path(path).unwrap();
+                            handle_restore(&mut criu, checkpoint.checkpoint_id.clone());
+                        }
+                        Some(1) => {
+                            // Delete checkpoint
+                            let checkpoint_dir = get_hcriu_dir().join(checkpoint.checkpoint_id.clone());
+                            std::fs::remove_dir_all(&checkpoint_dir).unwrap();
+                        }
+                        _ => {}
+                    }
                 }
-                Some(1) => {
-                    let checkpoint_dir = get_hcriu_dir().join(checkpoint.checkpoint_id.clone());
-                    std::fs::remove_dir_all(&checkpoint_dir).unwrap();
+            }
+        },
+        PopupType::Process => {
+            if let Some(selected_process_idx) = app_state.processes_state.selected() {
+                if selected_process_idx < app_state.processes.len() {
+                    let process = &app_state.processes[selected_process_idx];
+                    
+                    match app_state.popup_state.selected() {
+                        Some(0) => {
+                            // Take a snapshot and stop
+                            println!("Taking snapshot of process {} and stopping it", process.pid);
+                            // TODO: Implement actual snapshot and stop functionality
+                        }
+                        Some(1) => {
+                            // Take a snapshot and leave running
+                            println!("Taking snapshot of process {} and leaving it running", process.pid);
+                            // TODO: Implement actual snapshot functionality
+                        }
+                        Some(2) => {
+                            // Take snapshots periodically
+                            println!("Taking periodic snapshots of process {}", process.pid);
+                            // TODO: Implement periodic snapshot functionality
+                        }
+                        _ => {}
+                    }
                 }
-                _ => {}
             }
         }
     }
 }
 
+// Process information structure
+struct ProcessInfo {
+    pid: i32,
+    name: String,
+    cmd: String,
+}
+
+// Popup menu type
+#[derive(PartialEq, Debug, Copy, Clone)]
+enum PopupType {
+    Checkpoint,
+    Process,
+}
+
 // Application state to manage the list state and scrollbar
 struct AppState {
+    focused_area: FocusedArea,
+    last_update: Instant,
+    update_interval: Duration,
+    // checkpoint widget
     checkpoints: Vec<CheckpointMeta>,
     checkpoints_state: ListState,
     scrollbar_state: ScrollbarState,
+
+    // process widget
+    processes: Vec<ProcessInfo>,
+    processes_state: ListState,
+    processes_scrollbar_state: ScrollbarState,
+
+    // popup widget
     show_popup: bool,
     popup_state: ListState,
-    focused_area: FocusedArea,
+    popup_type: PopupType,
 }
 
 impl AppState {
@@ -378,9 +510,15 @@ impl AppState {
             checkpoints,
             checkpoints_state: ListState::default(),
             scrollbar_state: ScrollbarState::default(),
+            processes: Vec::new(),
+            processes_state: ListState::default(),
+            processes_scrollbar_state: ScrollbarState::default(),
             show_popup: false,
             popup_state: ListState::default(),
+            popup_type: PopupType::Checkpoint,
             focused_area: FocusedArea::Checkpoints,
+            last_update: Instant::now(),
+            update_interval: Duration::from_secs(1),
         };
         
         // Initialize with first item selected if list is not empty
@@ -392,7 +530,7 @@ impl AppState {
         state
     }
     
-    fn next(&mut self) {
+    fn checkpoints_next(&mut self) {
         let i = match self.checkpoints_state.selected() {
             Some(i) => {
                 if i >= self.checkpoints.len() - 1 {
@@ -407,7 +545,7 @@ impl AppState {
         self.scrollbar_state = self.scrollbar_state.position(i);
     }
     
-    fn previous(&mut self) {
+    fn checkpoints_previous(&mut self) {
         let i = match self.checkpoints_state.selected() {
             Some(i) => {
                 if i == 0 {
@@ -452,5 +590,35 @@ impl AppState {
     
     fn set_focused_area(&mut self, area: FocusedArea) {
         self.focused_area = area;
+    }
+    
+    fn processes_next(&mut self) {
+        let i = match self.processes_state.selected() {
+            Some(i) => {
+                if i >= self.processes.len() - 1 {
+                    0
+                } else {
+                    i + 1
+                }
+            }
+            None => 0,
+        };
+        self.processes_state.select(Some(i));
+        self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
+    }
+    
+    fn processes_previous(&mut self) {
+        let i = match self.processes_state.selected() {
+            Some(i) => {
+                if i == 0 {
+                    self.processes.len() - 1
+                } else {
+                    i - 1
+                }
+            }
+            None => 0,
+        };
+        self.processes_state.select(Some(i));
+        self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
     }
 }
