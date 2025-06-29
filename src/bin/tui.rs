@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
-use ratatui::layout::{Constraint, Direction, Layout, Position, Rect};
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span, Text};
+use crossterm::event::{self, Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
+use ratatui::layout::{Constraint, Layout, Position, Rect};
+use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Clear, Borders, List, ListItem, ListState, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::text::Line;
 use ratatui::Frame;
 use rust_criu::Criu;
 use which::which;
@@ -59,17 +59,20 @@ fn main() -> std::io::Result<()> {
     // Initial process list load
     app_state.processes = get_all_processes();
     if !app_state.processes.is_empty() {
-        app_state.processes_state.select(Some(0));
-        app_state.processes_scrollbar_state = app_state.processes_scrollbar_state.position(0);
+        let _ = app_state.processes_scrollbar_state.content_length(app_state.processes.len()).position(0);
+    }
+    if !app_state.checkpoints.is_empty() {
+        app_state.checkpoints_state.select(Some(0));
     }
     
     loop {
         // Update process list if interval has elapsed
-        if app_state.last_update.elapsed() >= app_state.update_interval {
-            app_state.processes = get_all_processes();
-            app_state.checkpoints = get_all_checkpoints();
-            app_state.last_update = Instant::now();
-        }
+        // if app_state.last_update.elapsed() >= app_state.update_interval {
+        //     app_state.processes = get_all_processes();
+        //     app_state.checkpoints = get_all_checkpoints();
+        //     app_state.processes_scrollbar_state = app_state.processes_scrollbar_state.content_length(app_state.checkpoints.len());
+        //     app_state.last_update = Instant::now();
+        // }
         
         terminal.draw(|f| draw(f, &widgets, &mut app_state)).expect("failed to draw frame");
         if handle_events(&widgets, &mut app_state)? {
@@ -159,10 +162,10 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
     frame.render_widget(processes_block, processes_area);
     
     // Create list items from processes
-    let process_items: Vec<ListItem> = app_state.processes
+    let mut process_items: Vec<Line> = app_state.processes
         .iter()
         .map(|process| {
-            ListItem::new(format!("{:<6} {:<15} {}", 
+            Line::from(format!("{:<6} {:<15} {}", 
                 process.pid,
                 process.name,
                 process.cmd,
@@ -170,13 +173,19 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
         })
         .collect();
     
+    // Highlight the selected process
+    if let Some(selected_process_idx) = app_state.processes_scrollbar {
+        if selected_process_idx < app_state.processes.len() {
+            process_items[selected_process_idx].style = Style::default().fg(Color::Green);
+        }
+    }
+
     // Create the list widget for processes
-    let processes_list = List::new(process_items)
-        .highlight_style(Style::default().bg(Color::DarkGray))
-        .highlight_symbol(" ");
+    // let processes_list = Paragraph::new(process_items).scroll((app_state.processes_scrollbar as u16, 0));
+    let processes_list = Paragraph::new(process_items);
     
     // Render the processes list with state
-    frame.render_stateful_widget(processes_list, processes_inner_area, &mut app_state.processes_state);
+    frame.render_widget(processes_list, processes_inner_area);
     
     // Render processes scrollbar
     let processes_scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
@@ -437,7 +446,7 @@ fn handle_popup_action(app_state: &mut AppState) {
             }
         },
         PopupType::Process => {
-            if let Some(selected_process_idx) = app_state.processes_state.selected() {
+            if let Some(selected_process_idx) = app_state.processes_scrollbar {
                 if selected_process_idx < app_state.processes.len() {
                     let process = &app_state.processes[selected_process_idx];
                     
@@ -449,15 +458,15 @@ fn handle_popup_action(app_state: &mut AppState) {
                         }
                         Some(1) => {
                             // Take a snapshot and leave running
-                            println!("Taking snapshot of process {} and leaving it running", process.pid);
-                            // TODO: Implement actual snapshot functionality
-                        }
-                        Some(2) => {
-                            // Take snapshots periodically
-                            println!("Taking periodic snapshots of process {}", process.pid);
-                            // TODO: Implement periodic snapshot functionality
-                        }
-                        _ => {}
+                        println!("Taking snapshot of process {} and leaving it running", process.pid);
+                        // TODO: Implement actual snapshot functionality
+                    }
+                    Some(2) => {
+                        // Take snapshots periodically
+                        println!("Taking periodic snapshots of process {}", process.pid);
+                        // TODO: Implement periodic snapshot functionality
+                    }
+                    _ => {}
                     }
                 }
             }
@@ -491,8 +500,8 @@ struct AppState {
 
     // process widget
     processes: Vec<ProcessInfo>,
-    processes_state: ListState,
     processes_scrollbar_state: ScrollbarState,
+    processes_scrollbar: Option<usize>,
 
     // popup widget
     show_popup: bool,
@@ -509,7 +518,6 @@ impl AppState {
             checkpoints_state: ListState::default(),
             scrollbar_state: ScrollbarState::default(),
             processes: Vec::new(),
-            processes_state: ListState::default(),
             processes_scrollbar_state: ScrollbarState::default(),
             show_popup: false,
             popup_state: ListState::default(),
@@ -517,6 +525,7 @@ impl AppState {
             focused_area: FocusedArea::Checkpoints,
             last_update: Instant::now(),
             update_interval: Duration::from_secs(1),
+            processes_scrollbar: None,
             checkpoints_popup: vec![
             "r restore checkpoint to process",
             "d delete checkpoint",
@@ -610,7 +619,7 @@ impl AppState {
     }
     
     fn processes_next(&mut self) {
-        let i = match self.processes_state.selected() {
+        let i = match self.processes_scrollbar {
             Some(i) => {
                 if i >= self.processes.len() - 1 {
                     0
@@ -620,12 +629,12 @@ impl AppState {
             }
             None => 0,
         };
-        self.processes_state.select(Some(i));
+        self.processes_scrollbar = Some(i);
         self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
     }
     
     fn processes_previous(&mut self) {
-        let i = match self.processes_state.selected() {
+        let i = match self.processes_scrollbar {
             Some(i) => {
                 if i == 0 {
                     self.processes.len() - 1
@@ -635,7 +644,7 @@ impl AppState {
             }
             None => 0,
         };
-        self.processes_state.select(Some(i));
+        self.processes_scrollbar = Some(i);
         self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
     }
 }
