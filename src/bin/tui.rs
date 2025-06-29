@@ -311,6 +311,24 @@ fn handle_key_events(key: KeyCode, app_state: &mut AppState) -> bool {
                 app_state.next();
             }
         }
+        KeyCode::Tab => {
+            // Cycle through areas: Checkpoints -> Processes -> Tasks -> Checkpoints
+            match app_state.focused_area {
+                FocusedArea::Checkpoints => app_state.set_focused_area(FocusedArea::Processes),
+                FocusedArea::Processes => app_state.set_focused_area(FocusedArea::Tasks),
+                FocusedArea::Tasks => app_state.set_focused_area(FocusedArea::Checkpoints),
+                _ => app_state.set_focused_area(FocusedArea::Checkpoints),
+            }
+        }
+        KeyCode::BackTab => {
+            // Reverse cycle: Checkpoints -> Tasks -> Processes -> Checkpoints
+            match app_state.focused_area {
+                FocusedArea::Checkpoints => app_state.set_focused_area(FocusedArea::Tasks),
+                FocusedArea::Tasks => app_state.set_focused_area(FocusedArea::Processes),
+                FocusedArea::Processes => app_state.set_focused_area(FocusedArea::Checkpoints),
+                _ => app_state.set_focused_area(FocusedArea::Checkpoints),
+            }
+        }
         _ => {}
     }
     return false;
