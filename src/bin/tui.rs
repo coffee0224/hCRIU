@@ -17,6 +17,7 @@ use which::which;
 
 use hcriu::restore::handle_restore;
 use hcriu::utils::{CheckpointMeta, get_all_checkpoints, get_hcriu_dir, set_hcriu_dir};
+use humantime;
 
 fn find_criu_path() -> Option<String> {
   which("criu").ok().map(|p| p.to_string_lossy().into_owned())
@@ -50,14 +51,24 @@ fn get_all_processes() -> Vec<ProcessInfo> {
 fn main() -> std::io::Result<()> {
   let mut terminal = ratatui::init();
   let widgets = WidgetsArea::new(&terminal.get_frame());
+  // Initialize app state
+  let mut app_state = AppState::new();
 
   // Initialize hcriu directory
   let home_dir = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
   let hcriu_dir = home_dir.join(".hcriu");
   set_hcriu_dir(hcriu_dir);
 
-  // Initialize app state
-  let mut app_state = AppState::new();
+  // get criu path
+  let path = match find_criu_path() {
+    Some(path) => path,
+    None => {
+      eprintln!("criu not found in PATH, please specify --criu-path");
+      std::process::exit(1);
+    }
+  };
+  app_state.criu_path = path;
+
   app_state.checkpoints = get_all_checkpoints();
 
   // Initial process list load
@@ -77,12 +88,12 @@ fn main() -> std::io::Result<()> {
 
   loop {
     // Update process list if interval has elapsed
-    // if app_state.last_update.elapsed() >= app_state.update_interval {
-    //     app_state.processes = get_all_processes();
-    //     app_state.checkpoints = get_all_checkpoints();
-    //     app_state.processes_scrollbar_state = app_state.processes_scrollbar_state.content_length(app_state.checkpoints.len());
-    //     app_state.last_update = Instant::now();
-    // }
+    if app_state.last_update.elapsed() >= app_state.update_interval {
+        app_state.processes = get_all_processes();
+        app_state.checkpoints = get_all_checkpoints();
+        app_state.processes_scrollbar_state = app_state.processes_scrollbar_state.content_length(app_state.checkpoints.len());
+        app_state.last_update = Instant::now();
+    }
 
     terminal
       .draw(|f| draw(f, &widgets, &mut app_state))
@@ -477,15 +488,7 @@ fn handle_popup_action(app_state: &mut AppState) {
 
           match app_state.popup_state.selected() {
             Some(0) => {
-              // Restore checkpoint
-              let path = match find_criu_path() {
-                Some(path) => path,
-                None => {
-                  eprintln!("criu not found in PATH, please specify --criu-path");
-                  std::process::exit(1);
-                }
-              };
-              let mut criu = Criu::new_with_criu_path(path).unwrap();
+              let mut criu = Criu::new_with_criu_path(app_state.criu_path.clone()).unwrap();
               handle_restore(&mut criu, checkpoint.checkpoint_id.clone());
             }
             Some(1) => {
@@ -502,20 +505,16 @@ fn handle_popup_action(app_state: &mut AppState) {
       if let Some(selected_process_idx) = app_state.processes_seleted {
         if selected_process_idx < app_state.processes.len() {
           let process = &app_state.processes[selected_process_idx];
+          let mut criu = Criu::new_with_criu_path(app_state.criu_path.clone()).unwrap();
 
           match app_state.popup_state.selected() {
             Some(0) => {
               // Take a snapshot and stop
-              println!("Taking snapshot of process {} and stopping it", process.pid);
-              // TODO: Implement actual snapshot and stop functionality
+              hcriu::dump::handle_dump(&mut criu, process.pid, None, None, false);
             }
             Some(1) => {
               // Take a snapshot and leave running
-              println!(
-                "Taking snapshot of process {} and leaving it running",
-                process.pid
-              );
-              // TODO: Implement actual snapshot functionality
+              hcriu::dump::handle_dump(&mut criu, process.pid, None, None, true);
             }
             Some(2) => {
               // Take snapshots periodically
@@ -571,6 +570,9 @@ struct AppState {
   // style
   default_border_style: Style,
   focused_border_style: Style,
+
+  // criu
+  criu_path: String,
 }
 
 impl AppState {
@@ -599,6 +601,8 @@ impl AppState {
       // style
       default_border_style: Style::default().fg(Color::White),
       focused_border_style: Style::default().fg(Color::Green),
+
+      criu_path: String::new(),
     }
   }
 
