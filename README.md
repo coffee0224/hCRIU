@@ -2,6 +2,10 @@
 
 hCRIU is a tool to creat and restore checkpoint of process based on [CRIU](https://github.com/checkpoint-restore/criu). It support checkpoint manager, including periodically creat, merge and restore.
 
+## TODO
+- [ ] input popup to input duration for periodic checkpoint
+- [ ] spawn thread to dump periodically
+
 ## How to use
 Firstly, you need to install [criu](https://criu.org/Packages).
 

@@ -518,8 +518,9 @@ fn handle_popup_action(app_state: &mut AppState) {
             }
             Some(2) => {
               // Take snapshots periodically
-              println!("Taking periodic snapshots of process {}", process.pid);
-              // TODO: Implement periodic snapshot functionality
+              let duration =  todo!();
+              hcriu::dump::handle_dump(&mut criu, process.pid, duration, None, true);
+
             }
             _ => {}
           }
