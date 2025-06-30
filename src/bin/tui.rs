@@ -69,7 +69,6 @@ fn main() -> std::io::Result<()> {
       .position(0);
   }
   if !app_state.checkpoints.is_empty() {
-    app_state.checkpoints_seleted = Some(0);
     let _ = app_state
       .checkpoints_scrollbar_state
       .content_length(app_state.checkpoints.len())
@@ -673,6 +672,7 @@ impl AppState {
 
   fn set_focused_area(&mut self, area: FocusedArea) {
     self.focused_area = area;
+    self.reset_scroll();
   }
 
   fn processes_next(&mut self) {
@@ -703,5 +703,14 @@ impl AppState {
     };
     self.processes_seleted = Some(i);
     self.processes_scrollbar_state = self.processes_scrollbar_state.position(i);
+  }
+
+  fn reset_scroll(&mut self) {
+    self.checkpoints_seleted = None;
+    self.processes_seleted = None;
+    self.checkpoints_scroll = 0;
+    self.processes_scroll = 0;
+    self.checkpoints_scrollbar_state = self.checkpoints_scrollbar_state.position(0);
+    self.processes_scrollbar_state = self.processes_scrollbar_state.position(0);
   }
 }
