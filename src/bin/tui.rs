@@ -97,8 +97,6 @@ fn main() -> std::io::Result<()> {
 }
 
 fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
-  let default_border_style = Style::default().fg(Color::White);
-  let focused_border_style = Style::default().fg(Color::Green);
   let [
     title_area,
     checkpoints_area,
@@ -118,9 +116,9 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
       .title("hcriu-ui")
       .borders(Borders::ALL)
       .border_style(if app_state.focused_area == FocusedArea::Title {
-        focused_border_style
+        app_state.focused_border_style
       } else {
-        default_border_style
+        app_state.default_border_style
       }),
     title_area,
   );
@@ -137,8 +135,8 @@ fn draw(frame: &mut Frame, widgets: &WidgetsArea, app_state: &mut AppState) {
 }
 
 fn draw_checkpoints(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &mut AppState) {
-  let default_border_style = Style::default().fg(Color::White);
-  let focused_border_style = Style::default().fg(Color::Green);
+  let default_border_style = app_state.default_border_style;
+  let focused_border_style = app_state.focused_border_style;
   let checkpoints_block = Block::default()
     .title("Checkpoints")
     .borders(Borders::ALL)
@@ -168,7 +166,7 @@ fn draw_checkpoints(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &
 
   if let Some(selected_checkpoint_idx) = app_state.checkpoints_seleted {
     if selected_checkpoint_idx < app_state.checkpoints.len() {
-      checkpoints_items[selected_checkpoint_idx].style = Style::default().fg(Color::Green); 
+      checkpoints_items[selected_checkpoint_idx].style = focused_border_style;
     }
   }
 
@@ -183,7 +181,8 @@ fn draw_checkpoints(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &
     }
   }
 
-  let checkpoints_list = Paragraph::new(checkpoints_items).scroll((app_state.checkpoints_scroll as u16, 0));
+  let checkpoints_list =
+    Paragraph::new(checkpoints_items).scroll((app_state.checkpoints_scroll as u16, 0));
 
   frame.render_widget(checkpoints_list, checkpoints_inner_area);
 
@@ -200,8 +199,8 @@ fn draw_checkpoints(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &
 }
 
 fn draw_processes(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &mut AppState) {
-  let default_border_style = Style::default().fg(Color::White);
-  let focused_border_style = Style::default().fg(Color::Green);
+  let default_border_style = app_state.default_border_style;
+  let focused_border_style = app_state.focused_border_style;
   // Render processes list with scrollbar
   let processes_block = Block::default()
     .title("Processes")
@@ -230,7 +229,7 @@ fn draw_processes(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &mu
   // Highlight the selected process
   if let Some(selected_process_idx) = app_state.processes_seleted {
     if selected_process_idx < app_state.processes.len() {
-      process_items[selected_process_idx].style = Style::default().fg(Color::Green);
+      process_items[selected_process_idx].style = focused_border_style;
     }
   }
 
@@ -263,8 +262,8 @@ fn draw_processes(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &mu
 }
 
 fn draw_tasks(frame: &mut Frame, area: ratatui::layout::Rect, app_state: &mut AppState) {
-  let default_border_style = Style::default().fg(Color::White);
-  let focused_border_style = Style::default().fg(Color::Green);
+  let default_border_style = app_state.default_border_style;
+  let focused_border_style = app_state.focused_border_style;
   frame.render_widget(
     Block::default()
       .title("Tasks")
@@ -569,11 +568,15 @@ struct AppState {
   popup_type: PopupType,
   checkpoints_popup: Vec<&'static str>,
   processes_popup: Vec<&'static str>,
+
+  // style
+  default_border_style: Style,
+  focused_border_style: Style,
 }
 
 impl AppState {
   fn new() -> Self {
-    let mut state = Self {
+    Self {
       checkpoints: Vec::new(),
       checkpoints_seleted: None,
       checkpoints_scroll: 0,
@@ -594,9 +597,10 @@ impl AppState {
         "l take a snapshot and leave running",
         "p take periodic snapshots",
       ],
-    };
-
-    state
+      // style
+      default_border_style: Style::default().fg(Color::White),
+      focused_border_style: Style::default().fg(Color::Green),
+    }
   }
 
   fn checkpoints_next(&mut self) {
